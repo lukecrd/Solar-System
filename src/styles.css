@@ -1,0 +1,453 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --color-bg: #06070c;
+  --color-fg: #e7edf6;
+  --color-muted: #8d99ae;
+  --color-faint: #66758c;
+  --color-surface: #10151f;
+  --color-line: #2a3548;
+  --color-accent: #d7b15a;
+  --color-accent-ink: #1c1608;
+  --color-ice: #9ec4ff;
+  --radius-panel: 1.15rem;
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    line-height: 1.45;
+  }
+}
+
+.app-shell {
+  position: relative;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  user-select: none;
+}
+
+.stage {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.stage canvas {
+  touch-action: none;
+  display: block;
+}
+
+.glass {
+  background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-line) 92%, transparent);
+  border-radius: var(--radius-panel);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 50px rgb(0 0 0 / 0.32);
+}
+
+.topbar {
+  position: absolute;
+  top: 0.85rem;
+  left: 0.85rem;
+  right: 0.85rem;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  pointer-events: none;
+}
+
+.topbar > * {
+  pointer-events: auto;
+}
+
+.kicker {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.wordmark h1 {
+  margin: 0.1rem 0 0;
+  font-size: clamp(1.7rem, 3vw, 2.15rem);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  text-shadow: 0 8px 28px rgb(0 0 0 / 0.55);
+}
+
+.sub {
+  margin: 0.4rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.92rem;
+  text-shadow: 0 2px 12px rgb(0 0 0 / 0.7);
+}
+
+.clock {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  padding: 0.55rem 0.8rem;
+  min-width: 8.5rem;
+  text-align: right;
+}
+
+.clock strong {
+  display: block;
+  font-weight: 500;
+  font-size: 0.95rem;
+  color: var(--color-fg);
+}
+
+.clock span {
+  color: var(--color-faint);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
+.rail {
+  position: absolute;
+  z-index: 5;
+  top: 6.4rem;
+  left: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: calc(100dvh - 13.5rem);
+  overflow: auto;
+  padding-right: 0.2rem;
+  scrollbar-width: none;
+}
+
+.rail::-webkit-scrollbar {
+  display: none;
+}
+
+.nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.75rem;
+  padding: 0.3rem 0.85rem 0.3rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: color-mix(in srgb, var(--color-bg) 35%, transparent);
+  color: var(--color-fg);
+  font: inherit;
+  font-size: 0.95rem;
+  text-align: left;
+}
+
+.nav-btn[data-active="true"] {
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  border-color: var(--color-line);
+}
+
+.nav-btn:hover {
+  border-color: var(--color-line);
+}
+
+.swatch {
+  width: 0.72rem;
+  height: 0.72rem;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px rgb(0 0 0 / 0.45);
+  flex: none;
+}
+
+.dossier {
+  position: absolute;
+  z-index: 5;
+  top: 6.4rem;
+  right: 0.85rem;
+  width: min(22rem, calc(100vw - 1.7rem));
+  max-height: calc(100dvh - 12.5rem);
+  overflow: auto;
+  padding: 1rem 1.05rem 0.95rem;
+}
+
+.dossier-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.dossier h2 {
+  margin: 0.15rem 0 0;
+  font-size: 1.55rem;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.kind {
+  margin: 0;
+  color: var(--color-ice);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.blurb {
+  margin: 0.75rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem 0.8rem;
+  margin: 0.95rem 0 0;
+}
+
+.facts dt {
+  margin: 0;
+  color: var(--color-faint);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.facts dd {
+  margin: 0.12rem 0 0;
+  color: var(--color-fg);
+  font-size: 0.92rem;
+}
+
+.note {
+  margin: 0.9rem 0 0;
+  color: var(--color-faint);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.icon-btn,
+.text-btn {
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-line);
+  background: color-mix(in srgb, var(--color-bg) 40%, transparent);
+  color: var(--color-fg);
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0 0.85rem;
+}
+
+.icon-btn {
+  padding: 0;
+}
+
+.text-btn[data-on="true"],
+.icon-btn[data-on="true"] {
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+  border-color: var(--color-accent);
+}
+
+.icon-btn:hover,
+.text-btn:hover {
+  border-color: var(--color-ice);
+}
+
+.dock {
+  position: absolute;
+  z-index: 5;
+  left: 0.85rem;
+  right: 0.85rem;
+  bottom: 0.85rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem;
+}
+
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.speed {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex: 1;
+  min-width: 8rem;
+  padding: 0 0.35rem;
+}
+
+.speed label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.speed input[type="range"] {
+  flex: 1;
+  min-width: 4.5rem;
+  height: 2.75rem;
+  accent-color: var(--color-accent);
+  background: transparent;
+}
+
+.speed output {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  min-width: 3.2rem;
+  text-align: right;
+  color: var(--color-fg);
+}
+
+.toggles {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.keys {
+  display: none;
+}
+
+@media (min-width: 960px) {
+  .keys {
+    display: block;
+    padding: 0 0.55rem;
+    color: var(--color-faint);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 800px) {
+  .app-shell {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto auto auto;
+    grid-template-areas:
+      "view"
+      "dossier"
+      "rail"
+      "dock";
+  }
+
+  .stage {
+    position: relative;
+    inset: auto;
+    grid-area: view;
+    min-height: 12rem;
+  }
+
+  .topbar {
+    top: 0.65rem;
+    left: 0.65rem;
+    right: 0.65rem;
+  }
+
+  .rail {
+    position: relative;
+    inset: auto;
+    top: auto;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    grid-area: rail;
+    flex-direction: row;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    margin: 0.35rem 0.65rem 0;
+    padding-bottom: 0.1rem;
+  }
+
+  .nav-btn {
+    flex: none;
+  }
+
+  .dossier {
+    position: relative;
+    inset: auto;
+    top: auto;
+    right: auto;
+    left: auto;
+    bottom: auto;
+    grid-area: dossier;
+    width: auto;
+    max-height: 14.5rem;
+    margin: 0.35rem 0.65rem 0;
+    padding: 0.8rem 0.85rem 0.75rem;
+  }
+
+  .dock {
+    position: relative;
+    inset: auto;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    grid-area: dock;
+    margin: 0.35rem 0.65rem 0.45rem;
+  }
+
+  .dock .text-btn {
+    width: 2.75rem;
+    padding: 0;
+    font-size: 0;
+    gap: 0;
+  }
+
+  .sub {
+    max-width: 12.5rem;
+  }
+
+  .clock {
+    min-width: 0;
+    padding: 0.45rem 0.6rem;
+  }
+
+  .facts {
+    gap: 0.45rem 0.65rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass {
+    backdrop-filter: none;
+  }
+}

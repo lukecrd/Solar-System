@@ -1,8 +1,8 @@
 import { i as __toESM } from "../_runtime.mjs";
-import { _ as Vector3, a as useFrame, b as require_jsx_runtime, c as ClampToEdgeWrapping, d as GLSL3, f as MeshStandardMaterial, g as ShaderMaterial, h as SRGBColorSpace, i as Canvas, l as Color, m as RepeatWrapping, n as OrbitControls, o as useThree, p as Object3D, r as Line, s as CanvasTexture, t as Stars, u as DodecahedronGeometry, x as require_react } from "../_libs/@react-three/drei+[...].mjs";
+import { C as require_jsx_runtime, _ as SRGBColorSpace, a as useFrame, b as Vector3, c as BufferGeometry, d as Color, f as DodecahedronGeometry, g as RepeatWrapping, h as Object3D, i as Canvas, l as CanvasTexture, m as MeshStandardMaterial, n as useTexture, o as useThree, p as GLSL3, r as Line, s as BufferAttribute, t as OrbitControls, u as ClampToEdgeWrapping, v as ShaderMaterial, w as require_react, y as SphereGeometry } from "../_libs/@react-three/drei+[...].mjs";
 import { a as Play, i as Route, o as Pause, r as Tag, s as Orbit, t as X } from "../_libs/lucide-react.mjs";
 import { t as create } from "../_libs/zustand.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/routes-CO4_wWUk.js
+//#region node_modules/.nitro/vite/services/ssr/assets/routes-ivgiy7J8.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 var SUN = {
@@ -637,6 +637,10 @@ function Hud() {
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 						className: "sub",
 						children: "Sistema solare. Clicca un pianeta: la camera lo segue."
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "credit",
+						children: "Superfici e Via Lattea: NASA · Solar System Scope"
 					})
 				]
 			}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -759,14 +763,523 @@ function Hud() {
 		})
 	] });
 }
-function rng(seed) {
-	let a = seed >>> 0;
-	return () => {
-		a = a + 1831565813 | 0;
-		let t = Math.imul(a ^ a >>> 15, 1 | a);
-		t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-		return ((t ^ t >>> 14) >>> 0) / 4294967296;
+var STAR_VERT = `
+  attribute float aSize;
+  attribute float aPhase;
+  varying vec3 vColor;
+  varying float vPhase;
+  uniform float uTime;
+  uniform float uPixelRatio;
+  void main() {
+    vColor = color;
+    vPhase = aPhase;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    float tw = 0.78 + 0.22 * sin(uTime * (0.55 + aPhase * 1.4) + aPhase * 18.0);
+    gl_PointSize = clamp(aSize * tw * uPixelRatio * (460.0 / max(8.0, -mv.z)), 0.8, 4.8);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+var STAR_FRAG = `
+  uniform sampler2D uStar;
+  varying vec3 vColor;
+  varying float vPhase;
+  out vec4 fragColor;
+  void main() {
+    vec4 tex = texture(uStar, gl_PointCoord);
+    if (tex.a < 0.05) discard;
+    fragColor = vec4(vColor * tex.rgb, tex.a);
+  }
+`;
+function starSprite() {
+	const canvas = document.createElement("canvas");
+	canvas.width = 64;
+	canvas.height = 64;
+	const ctx = canvas.getContext("2d");
+	if (!ctx) throw new Error("canvas");
+	const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+	g.addColorStop(0, "rgba(255,255,255,1)");
+	g.addColorStop(.18, "rgba(255,255,255,0.9)");
+	g.addColorStop(.45, "rgba(255,255,255,0.25)");
+	g.addColorStop(1, "rgba(255,255,255,0)");
+	ctx.fillStyle = g;
+	ctx.fillRect(0, 0, 64, 64);
+	const texture = new CanvasTexture(canvas);
+	texture.colorSpace = SRGBColorSpace;
+	texture.needsUpdate = true;
+	return texture;
+}
+function starField() {
+	const count = 1100;
+	const positions = new Float32Array(count * 3);
+	const colors = new Float32Array(count * 3);
+	const sizes = new Float32Array(count);
+	const phases = new Float32Array(count);
+	const palette = [
+		[
+			.68,
+			.8,
+			1
+		],
+		[
+			.82,
+			.9,
+			1
+		],
+		[
+			1,
+			.98,
+			.95
+		],
+		[
+			1,
+			.93,
+			.78
+		],
+		[
+			1,
+			.72,
+			.48
+		]
+	];
+	let seed = 20260321;
+	const rnd = () => {
+		seed = (seed * 16807 + 11) % 2147483647;
+		return (seed & 2147483647) / 2147483647;
 	};
+	for (let i = 0; i < count; i++) {
+		const z = rnd() * 2 - 1;
+		const phi = rnd() * Math.PI * 2;
+		const rad = Math.sqrt(Math.max(0, 1 - z * z));
+		const radius = 500;
+		positions[i * 3] = rad * Math.cos(phi) * radius;
+		positions[i * 3 + 1] = z * radius;
+		positions[i * 3 + 2] = rad * Math.sin(phi) * radius;
+		const bright = rnd() ** 2.4;
+		const tint = palette[Math.min(palette.length - 1, Math.floor(rnd() * palette.length))];
+		colors[i * 3] = tint[0] * (.45 + bright * .7);
+		colors[i * 3 + 1] = tint[1] * (.45 + bright * .7);
+		colors[i * 3 + 2] = tint[2] * (.45 + bright * .7);
+		sizes[i] = 1.1 + bright * 3.4;
+		phases[i] = rnd();
+	}
+	const geo = new BufferGeometry();
+	geo.setAttribute("position", new BufferAttribute(positions, 3));
+	geo.setAttribute("color", new BufferAttribute(colors, 3));
+	geo.setAttribute("aSize", new BufferAttribute(sizes, 1));
+	geo.setAttribute("aPhase", new BufferAttribute(phases, 1));
+	return geo;
+}
+function SkyField({ map }) {
+	const points = (0, import_react.useRef)(null);
+	const dpr = useThree((state) => state.gl.getPixelRatio());
+	const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+	const sprite = (0, import_react.useMemo)(() => starSprite(), []);
+	const geometry = (0, import_react.useMemo)(() => starField(), []);
+	const material = (0, import_react.useMemo)(() => new ShaderMaterial({
+		transparent: true,
+		depthWrite: false,
+		blending: 2,
+		vertexColors: true,
+		glslVersion: GLSL3,
+		toneMapped: false,
+		uniforms: {
+			uTime: { value: 0 },
+			uPixelRatio: { value: dpr },
+			uStar: { value: sprite }
+		},
+		vertexShader: STAR_VERT,
+		fragmentShader: STAR_FRAG
+	}), [dpr, sprite]);
+	(0, import_react.useEffect)(() => () => {
+		geometry.dispose();
+		material.dispose();
+		sprite.dispose();
+	}, [
+		geometry,
+		material,
+		sprite
+	]);
+	useFrame((_, delta) => {
+		if (!reduce) material.uniforms.uTime.value += Math.min(delta, .05);
+	});
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("group", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("mesh", {
+		rotation: [
+			0,
+			Math.PI / 2,
+			0
+		],
+		frustumCulled: false,
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("sphereGeometry", { args: [
+			560,
+			48,
+			32
+		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("meshBasicMaterial", {
+			map,
+			side: 1,
+			toneMapped: false
+		})]
+	}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("points", {
+		ref: points,
+		geometry,
+		material,
+		frustumCulled: false
+	})] });
+}
+var sphere = null;
+function unitSphere() {
+	if (!sphere) {
+		sphere = new SphereGeometry(1, 128, 96);
+		sphere.computeTangents();
+	}
+	return sphere;
+}
+function prepareMaps(maps) {
+	for (const tex of Object.values(maps)) {
+		tex.colorSpace = "";
+		tex.anisotropy = 8;
+		tex.wrapS = RepeatWrapping;
+		tex.wrapT = ClampToEdgeWrapping;
+		tex.needsUpdate = true;
+	}
+	maps.stars.wrapS = ClampToEdgeWrapping;
+	maps.stars.colorSpace = SRGBColorSpace;
+	maps.stars.needsUpdate = true;
+	maps.saturnRing.wrapS = ClampToEdgeWrapping;
+	maps.saturnRing.wrapT = ClampToEdgeWrapping;
+}
+var VERT = `
+  attribute vec4 tangent;
+  varying vec3 vWorld;
+  varying vec3 vNormalW;
+  varying vec3 vTangentW;
+  varying float vTangentSign;
+  varying vec2 vUv;
+  varying vec3 vLocal;
+  varying vec3 vSunLocal;
+  void main() {
+    vUv = uv;
+    vLocal = position;
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    vWorld = world.xyz;
+    mat3 rot = mat3(modelMatrix);
+    vNormalW = normalize(rot * normal);
+    vTangentW = normalize(rot * tangent.xyz);
+    vTangentSign = tangent.w;
+    vec3 worldL = normalize(-world.xyz);
+    vSunLocal = normalize(transpose(rot) * worldL);
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`;
+var FRAG = `
+  varying vec3 vWorld;
+  varying vec3 vNormalW;
+  varying vec3 vTangentW;
+  varying float vTangentSign;
+  varying vec2 vUv;
+  varying vec3 vLocal;
+  varying vec3 vSunLocal;
+  uniform sampler2D uMap;
+  uniform sampler2D uNight;
+  uniform sampler2D uSpec;
+  uniform sampler2D uNormal;
+  uniform sampler2D uRing;
+  uniform float uHasNight;
+  uniform float uHasSpec;
+  uniform float uHasNormal;
+  uniform float uBump;
+  uniform float uGloss;
+  uniform float uSpecStrength;
+  uniform vec3 uTint;
+  uniform float uSoft;
+  uniform float uLimb;
+  uniform float uNightStrength;
+  uniform float uNormalScale;
+  uniform float uRingInner;
+  uniform float uRingOuter;
+  uniform float uHasRing;
+  out vec4 fragColor;
+
+  float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+
+  void main() {
+    vec3 N = normalize(vNormalW);
+    vec3 T = normalize(vTangentW);
+    vec3 B = normalize(cross(N, T) * vTangentSign);
+    vec3 albedo = texture(uMap, vUv).rgb * uTint;
+    if (uHasNormal > 0.5) {
+      vec3 nTex = texture(uNormal, vUv).xyz * 2.0 - 1.0;
+      nTex.xy *= uNormalScale;
+      N = normalize(T * nTex.x + B * nTex.y + N * nTex.z);
+    } else if (uBump > 0.0) {
+      vec2 e = vec2(0.0015, 0.003);
+      float h0 = luma(texture(uMap, vUv).rgb);
+      float hx = luma(texture(uMap, vUv + vec2(e.x, 0.0)).rgb);
+      float hy = luma(texture(uMap, vUv + vec2(0.0, e.y)).rgb);
+      vec3 nb = vec3((h0 - hx) * uBump, (h0 - hy) * uBump, 1.0);
+      N = normalize(T * nb.x + B * nb.y + N * nb.z);
+    }
+    vec3 V = normalize(cameraPosition - vWorld);
+    vec3 L = normalize(-vWorld);
+    float ndl = dot(N, L);
+    float day = clamp((ndl + uSoft) / (1.0 + uSoft), 0.0, 1.0);
+    float lit = max(ndl, 0.0);
+    vec3 H = normalize(L + V);
+    float water = uHasSpec > 0.5 ? texture(uSpec, vUv).r : uSpecStrength;
+    float gloss = mix(max(6.0, uGloss * 0.35), uGloss, clamp(water, 0.0, 1.0));
+    float spec = pow(max(dot(N, H), 0.0), gloss) * max(water, 0.0) * lit;
+    float mu = clamp(dot(normalize(vNormalW), V), 0.0, 1.0);
+    float limb = mix(1.0, pow(max(mu, 0.001), 0.4), uLimb);
+    float night = smoothstep(0.12, -0.32, ndl);
+    vec3 lights = uHasNight > 0.5 ? texture(uNight, vUv).rgb * night * uNightStrength : vec3(0.0);
+    float shadow = 1.0;
+    if (uHasRing > 0.5) {
+      vec3 sunLocal = normalize(vSunLocal);
+      if (abs(sunLocal.y) > 0.001 && vLocal.y * sunLocal.y < 0.0) {
+        float t = -vLocal.y / sunLocal.y;
+        if (t > 0.0) {
+          vec3 hit = vLocal + sunLocal * t;
+          float rr = length(hit.xz);
+          if (rr > uRingInner && rr < uRingOuter) {
+            float u = clamp((rr - uRingInner) / (uRingOuter - uRingInner), 0.0, 1.0);
+            float dens = texture(uRing, vec2(u, 0.5)).a;
+            shadow = mix(1.0, 0.16, dens);
+          }
+        }
+      }
+    }
+    vec3 sunCol = vec3(1.0, 0.96, 0.9);
+    vec3 color = albedo * (day * limb * shadow * sunCol + 0.04) + spec * sunCol * shadow + lights;
+    fragColor = vec4(color, 1.0);
+  }
+`;
+function createSurfaceMaterial(opts) {
+	return new ShaderMaterial({
+		glslVersion: GLSL3,
+		uniforms: {
+			uMap: { value: opts.map },
+			uNight: { value: opts.night ?? opts.map },
+			uSpec: { value: opts.spec ?? opts.map },
+			uNormal: { value: opts.normal ?? opts.map },
+			uRing: { value: opts.ring ?? opts.map },
+			uHasNight: { value: opts.night ? 1 : 0 },
+			uHasSpec: { value: opts.spec ? 1 : 0 },
+			uHasNormal: { value: opts.normal ? 1 : 0 },
+			uBump: { value: opts.bump ?? 0 },
+			uGloss: { value: opts.gloss ?? 24 },
+			uSpecStrength: { value: opts.specStrength ?? .08 },
+			uTint: { value: new Color(opts.tint ?? "#ffffff") },
+			uSoft: { value: opts.soft ?? .04 },
+			uLimb: { value: opts.limb ?? .15 },
+			uNightStrength: { value: opts.nightStrength ?? 0 },
+			uNormalScale: { value: opts.normalScale ?? .85 },
+			uRingInner: { value: opts.ringInner ?? 0 },
+			uRingOuter: { value: opts.ringOuter ?? 1 },
+			uHasRing: { value: opts.ring ? 1 : 0 }
+		},
+		vertexShader: VERT,
+		fragmentShader: FRAG
+	});
+}
+var CLOUD_FRAG = `
+  varying vec2 vUv;
+  varying vec3 vWorld;
+  varying vec3 vNormalW;
+  uniform sampler2D uMap;
+  out vec4 fragColor;
+  void main() {
+    vec4 tex = texture(uMap, vUv);
+    if (tex.a < 0.05) discard;
+    vec3 N = normalize(vNormalW);
+    vec3 L = normalize(-vWorld);
+    float lit = smoothstep(-0.08, 0.32, dot(N, L));
+    float alpha = tex.a * (0.12 + 0.88 * lit) * 0.88;
+    fragColor = vec4(vec3(0.96, 0.97, 1.0) * (0.1 + lit), alpha);
+  }
+`;
+function createCloudMaterial(map) {
+	return new ShaderMaterial({
+		glslVersion: GLSL3,
+		transparent: true,
+		depthWrite: false,
+		uniforms: { uMap: { value: map } },
+		vertexShader: VERT,
+		fragmentShader: CLOUD_FRAG
+	});
+}
+var ATMO_VERT = `
+  varying vec3 vWorld;
+  varying vec3 vNormalW;
+  void main() {
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    vWorld = world.xyz;
+    vNormalW = normalize(mat3(modelMatrix) * normal);
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`;
+var ATMO_FRAG = `
+  varying vec3 vWorld;
+  varying vec3 vNormalW;
+  uniform vec3 uColor;
+  uniform float uStrength;
+  uniform float uPower;
+  out vec4 fragColor;
+  void main() {
+    vec3 N = normalize(vNormalW);
+    vec3 V = normalize(cameraPosition - vWorld);
+    vec3 L = normalize(-vWorld);
+    float fres = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), uPower);
+    float sun = 0.15 + 0.95 * pow(clamp(dot(N, L), 0.0, 1.0), 0.5);
+    vec3 glow = uColor * fres * sun * uStrength;
+    fragColor = vec4(glow, 1.0);
+  }
+`;
+function createAtmoMaterial(color, strength, power) {
+	const mat = new ShaderMaterial({
+		glslVersion: GLSL3,
+		transparent: true,
+		depthWrite: false,
+		blending: 2,
+		uniforms: {
+			uColor: { value: new Color(color) },
+			uStrength: { value: strength },
+			uPower: { value: power }
+		},
+		vertexShader: ATMO_VERT,
+		fragmentShader: ATMO_FRAG
+	});
+	mat.toneMapped = false;
+	return mat;
+}
+var SUN_VERT = `
+  varying vec3 vWorld;
+  varying vec3 vNormalW;
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    vWorld = world.xyz;
+    vNormalW = normalize(mat3(modelMatrix) * normal);
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`;
+var SUN_FRAG = `
+  varying vec3 vWorld;
+  varying vec3 vNormalW;
+  varying vec2 vUv;
+  uniform sampler2D uMap;
+  out vec4 fragColor;
+  void main() {
+    vec3 N = normalize(vNormalW);
+    vec3 V = normalize(cameraPosition - vWorld);
+    float limb = pow(clamp(dot(N, V), 0.0, 1.0), 0.36);
+    vec3 tex = texture(uMap, vUv).rgb;
+    fragColor = vec4(tex * (0.4 + 0.9 * limb) * 1.28, 1.0);
+  }
+`;
+function createSunMaterial(map) {
+	return new ShaderMaterial({
+		glslVersion: GLSL3,
+		toneMapped: false,
+		uniforms: { uMap: { value: map } },
+		vertexShader: SUN_VERT,
+		fragmentShader: SUN_FRAG
+	});
+}
+var RING_VERT = `
+  varying vec2 vXy;
+  varying vec3 vWorld;
+  varying vec3 vNormalW;
+  void main() {
+    vXy = position.xy;
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    vWorld = world.xyz;
+    vNormalW = normalize(mat3(modelMatrix) * normal);
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`;
+var RING_FRAG = `
+  varying vec2 vXy;
+  varying vec3 vWorld;
+  varying vec3 vNormalW;
+  uniform sampler2D uMap;
+  uniform float uInner;
+  uniform float uOuter;
+  uniform float uRadius;
+  uniform vec3 uCenter;
+  out vec4 fragColor;
+  void main() {
+    float r = length(vXy);
+    float t = clamp((r - uInner) / max(0.0001, uOuter - uInner), 0.0, 1.0);
+    vec4 ring = texture(uMap, vec2(t, 0.5));
+    float dens = ring.a;
+    float edge = smoothstep(0.0, 0.02, t) * smoothstep(1.0, 0.965, t);
+    vec3 L = normalize(-uCenter);
+    float light = 0.07 + 0.93 * abs(dot(normalize(vNormalW), L));
+    vec3 oc = vWorld - uCenter;
+    vec3 dir = normalize(-vWorld);
+    float b = dot(oc, dir);
+    float c = dot(oc, oc) - uRadius * uRadius;
+    float disc = b * b - c;
+    float shadow = 1.0;
+    if (disc > 0.0) {
+      float tHit = -b - sqrt(disc);
+      if (tHit > 0.03) shadow = 0.1;
+    }
+    vec3 color = ring.rgb * 1.9;
+    float alpha = dens * edge * light * shadow;
+    if (alpha < 0.012) discard;
+    fragColor = vec4(color, alpha);
+  }
+`;
+function createTexturedRingMaterial(map, inner, outer, planetRadius) {
+	return new ShaderMaterial({
+		glslVersion: GLSL3,
+		transparent: true,
+		side: 2,
+		depthWrite: false,
+		uniforms: {
+			uMap: { value: map },
+			uInner: { value: inner },
+			uOuter: { value: outer },
+			uRadius: { value: planetRadius },
+			uCenter: { value: new Vector3() }
+		},
+		vertexShader: RING_VERT,
+		fragmentShader: RING_FRAG
+	});
+}
+var THIN_FRAG = `
+  varying vec2 vXy;
+  uniform vec3 uColor;
+  uniform float uInner;
+  uniform float uOuter;
+  uniform float uOpacity;
+  out vec4 fragColor;
+  void main() {
+    float r = length(vXy);
+    float t = clamp((r - uInner) / max(0.0001, uOuter - uInner), 0.0, 1.0);
+    float lines = 0.35 + 0.65 * pow(0.5 + 0.5 * sin(t * 90.0), 4.0);
+    float gap = smoothstep(0.015, 0.0, abs(t - 0.42)) + smoothstep(0.012, 0.0, abs(t - 0.71));
+    float edge = smoothstep(0.0, 0.08, t) * smoothstep(1.0, 0.82, t);
+    float alpha = uOpacity * lines * (1.0 - clamp(gap, 0.0, 1.0)) * edge;
+    fragColor = vec4(uColor, alpha);
+  }
+`;
+function createThinRingMaterial(inner, outer, color, opacity) {
+	return new ShaderMaterial({
+		glslVersion: GLSL3,
+		transparent: true,
+		side: 2,
+		depthWrite: false,
+		uniforms: {
+			uColor: { value: new Color(color) },
+			uInner: { value: inner },
+			uOuter: { value: outer },
+			uOpacity: { value: opacity }
+		},
+		vertexShader: RING_VERT,
+		fragmentShader: THIN_FRAG
+	});
 }
 function makeCanvas(width, height, draw) {
 	const canvas = document.createElement("canvas");
@@ -783,208 +1296,7 @@ function makeCanvas(width, height, draw) {
 	texture.needsUpdate = true;
 	return texture;
 }
-function fill(ctx, color, w, h) {
-	ctx.fillStyle = color;
-	ctx.fillRect(0, 0, w, h);
-}
-function craters(ctx, w, h, seed, count, color) {
-	const random = rng(seed);
-	ctx.fillStyle = color;
-	for (let i = 0; i < count; i++) {
-		const x = random() * w;
-		const y = random() * h;
-		const r = 2 + random() * (h * .035);
-		ctx.globalAlpha = .18 + random() * .45;
-		ctx.beginPath();
-		ctx.arc(x, y, r, 0, Math.PI * 2);
-		ctx.fill();
-	}
-	ctx.globalAlpha = 1;
-}
-function bands(ctx, w, h, colors, waves, seed) {
-	const random = rng(seed);
-	const image = ctx.getImageData(0, 0, w, h);
-	const data = image.data;
-	const parsed = colors.map((hex) => {
-		const n = Number.parseInt(hex.slice(1), 16);
-		return [
-			n >> 16 & 255,
-			n >> 8 & 255,
-			n & 255
-		];
-	});
-	for (let y = 0; y < h; y++) {
-		const v = y / h;
-		const wave = Math.sin(v * waves * Math.PI * 2 + Math.sin(v * 9) * .6) * .5 + .5;
-		const jitter = Math.sin(v * 40 + random() * .2) * .04;
-		const t = Math.min(parsed.length - 1.001, Math.max(0, (wave + jitter) * (parsed.length - 1)));
-		const i0 = Math.floor(t);
-		const f = t - i0;
-		const a = parsed[i0];
-		const b = parsed[i0 + 1];
-		const r = a[0] + (b[0] - a[0]) * f;
-		const g = a[1] + (b[1] - a[1]) * f;
-		const bl = a[2] + (b[2] - a[2]) * f;
-		for (let x = 0; x < w; x++) {
-			const o = (y * w + x) * 4;
-			const grain = (random() - .5) * 18;
-			data[o] = r + grain;
-			data[o + 1] = g + grain;
-			data[o + 2] = bl + grain;
-			data[o + 3] = 255;
-		}
-	}
-	ctx.putImageData(image, 0, 0);
-}
-function drawMercury(ctx, w, h) {
-	fill(ctx, "#b7ab9d", w, h);
-	craters(ctx, w, h, 3, 220, "#6f675e");
-	craters(ctx, w, h, 9, 80, "#ddd4c8");
-}
-function drawVenus(ctx, w, h) {
-	bands(ctx, w, h, [
-		"#f3e2b8",
-		"#e7c98a",
-		"#f7edd4",
-		"#d9b56a"
-	], 6, 11);
-}
-function drawEarth(ctx, w, h) {
-	fill(ctx, "#1a4f86", w, h);
-	const random = rng(21);
-	const lands = [
-		"#2f6b3a",
-		"#3e7d45",
-		"#c2b36a",
-		"#2a5a34"
-	];
-	for (let i = 0; i < 18; i++) {
-		ctx.fillStyle = lands[i % lands.length];
-		ctx.globalAlpha = .92;
-		ctx.beginPath();
-		const x = random() * w;
-		const y = h * (.18 + random() * .64);
-		ctx.ellipse(x, y, 40 + random() * 120, 24 + random() * 70, random() * 2, 0, Math.PI * 2);
-		ctx.fill();
-	}
-	ctx.globalAlpha = 1;
-	const ice = ctx.createLinearGradient(0, 0, 0, h);
-	ice.addColorStop(0, "rgba(245,248,252,0.95)");
-	ice.addColorStop(.12, "rgba(245,248,252,0)");
-	ice.addColorStop(.88, "rgba(245,248,252,0)");
-	ice.addColorStop(1, "rgba(245,248,252,0.95)");
-	ctx.fillStyle = ice;
-	ctx.fillRect(0, 0, w, h);
-}
-function drawClouds(ctx, w, h) {
-	ctx.clearRect(0, 0, w, h);
-	const random = rng(44);
-	for (let i = 0; i < 70; i++) {
-		ctx.fillStyle = `rgba(255,255,255,${.18 + random() * .45})`;
-		ctx.beginPath();
-		ctx.ellipse(random() * w, random() * h, 30 + random() * 110, 8 + random() * 22, random() * .4, 0, Math.PI * 2);
-		ctx.fill();
-	}
-}
-function drawMars(ctx, w, h) {
-	fill(ctx, "#c2653e", w, h);
-	const random = rng(17);
-	ctx.fillStyle = "#8d3d28";
-	for (let i = 0; i < 10; i++) {
-		ctx.globalAlpha = .45;
-		ctx.beginPath();
-		ctx.ellipse(random() * w, random() * h, 30 + random() * 90, 16 + random() * 40, random(), 0, Math.PI * 2);
-		ctx.fill();
-	}
-	ctx.globalAlpha = 1;
-	craters(ctx, w, h, 19, 40, "#6a3224");
-	const ice = ctx.createLinearGradient(0, 0, 0, h);
-	ice.addColorStop(0, "rgba(245,240,236,0.9)");
-	ice.addColorStop(.08, "rgba(245,240,236,0)");
-	ice.addColorStop(.93, "rgba(245,240,236,0)");
-	ice.addColorStop(1, "rgba(245,240,236,0.85)");
-	ctx.fillStyle = ice;
-	ctx.fillRect(0, 0, w, h);
-}
-function drawJupiter(ctx, w, h) {
-	bands(ctx, w, h, [
-		"#e6d2b0",
-		"#c48a62",
-		"#f3e6cf",
-		"#c98458",
-		"#a86b48",
-		"#efe2c8",
-		"#d7a57a"
-	], 14, 23);
-	ctx.fillStyle = "#b55246";
-	ctx.globalAlpha = .9;
-	ctx.beginPath();
-	ctx.ellipse(w * .62, h * .58, w * .07, h * .055, -.3, 0, Math.PI * 2);
-	ctx.fill();
-	ctx.globalAlpha = .35;
-	ctx.fillStyle = "#f2d2c4";
-	ctx.beginPath();
-	ctx.ellipse(w * .61, h * .56, w * .03, h * .02, -.3, 0, Math.PI * 2);
-	ctx.fill();
-	ctx.globalAlpha = 1;
-}
-function drawSaturn(ctx, w, h) {
-	bands(ctx, w, h, [
-		"#f3e7c8",
-		"#e4d2a4",
-		"#f7f1df",
-		"#d8c08a",
-		"#efe4c6"
-	], 10, 29);
-}
-function drawUranus(ctx, w, h) {
-	bands(ctx, w, h, [
-		"#d5f2f1",
-		"#9fd4d8",
-		"#e7f7f6",
-		"#7fc4cc"
-	], 5, 31);
-}
-function drawNeptune(ctx, w, h) {
-	bands(ctx, w, h, [
-		"#2450b8",
-		"#3d6ad4",
-		"#1a3c96",
-		"#4e7ee0",
-		"#16327f"
-	], 8, 37);
-	ctx.fillStyle = "#16306e";
-	ctx.globalAlpha = .8;
-	ctx.beginPath();
-	ctx.ellipse(w * .4, h * .42, w * .035, h * .04, .2, 0, Math.PI * 2);
-	ctx.fill();
-	ctx.globalAlpha = 1;
-}
-var painters = {
-	mercury: drawMercury,
-	venus: drawVenus,
-	earth: drawEarth,
-	mars: drawMars,
-	jupiter: drawJupiter,
-	saturn: drawSaturn,
-	uranus: drawUranus,
-	neptune: drawNeptune
-};
 var cache = /* @__PURE__ */ new Map();
-function planetTexture(kind) {
-	const hit = cache.get(kind);
-	if (hit) return hit;
-	const texture = makeCanvas(1024, 512, painters[kind]);
-	cache.set(kind, texture);
-	return texture;
-}
-function cloudTexture() {
-	const hit = cache.get("clouds");
-	if (hit) return hit;
-	const texture = makeCanvas(1024, 512, drawClouds);
-	cache.set("clouds", texture);
-	return texture;
-}
 function glowTexture() {
 	const hit = cache.get("glow");
 	if (hit) return hit;
@@ -1045,65 +1357,90 @@ function OrbitTrail({ planet }) {
 		lineWidth: active ? 1.6 : 1
 	});
 }
-function Rings({ inner, outer, color, opacity }) {
-	const material = (0, import_react.useMemo)(() => new ShaderMaterial({
-		transparent: true,
-		side: 2,
-		depthWrite: false,
-		glslVersion: GLSL3,
-		uniforms: {
-			uColor: { value: new Color(color) },
-			uInner: { value: inner },
-			uOuter: { value: outer },
-			uOpacity: { value: opacity }
-		},
-		vertexShader: `
-          out vec2 vXy;
-          void main() {
-            vXy = position.xy;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-          }
-        `,
-		fragmentShader: `
-          in vec2 vXy;
-          uniform vec3 uColor;
-          uniform float uInner;
-          uniform float uOuter;
-          uniform float uOpacity;
-          out vec4 fragColor;
-          void main() {
-            float r = length(vXy);
-            float t = clamp((r - uInner) / max(0.0001, uOuter - uInner), 0.0, 1.0);
-            float bands = 0.55 + 0.45 * sin(t * 54.0 + sin(t * 17.0));
-            float gap = smoothstep(0.02, 0.0, abs(t - 0.48));
-            float edge = smoothstep(0.0, 0.04, t) * smoothstep(1.0, 0.9, t);
-            float alpha = uOpacity * bands * (1.0 - gap * 0.9) * edge;
-            fragColor = vec4(uColor, alpha);
-          }
-        `
-	}), [
-		color,
-		inner,
-		opacity,
-		outer
-	]);
-	(0, import_react.useEffect)(() => () => material.dispose(), [material]);
+var ATMOS = {
+	venus: {
+		color: "#f3d7a6",
+		strength: .78,
+		power: 1.65,
+		scale: 1.03
+	},
+	earth: {
+		color: "#8eb6ff",
+		strength: .9,
+		power: 3.05,
+		scale: 1.055
+	},
+	mars: {
+		color: "#e8aa90",
+		strength: .38,
+		power: 3.3,
+		scale: 1.026
+	},
+	jupiter: {
+		color: "#e8c59a",
+		strength: .48,
+		power: 2.5,
+		scale: 1.032
+	},
+	saturn: {
+		color: "#f3e0b8",
+		strength: .4,
+		power: 2.7,
+		scale: 1.028
+	},
+	uranus: {
+		color: "#c5f4ee",
+		strength: .62,
+		power: 2.35,
+		scale: 1.04
+	},
+	neptune: {
+		color: "#7c97ff",
+		strength: .7,
+		power: 2.45,
+		scale: 1.038
+	}
+};
+function PlanetRings({ material, inner, outer }) {
+	const ref = (0, import_react.useRef)(null);
+	useFrame(() => {
+		const mesh = ref.current;
+		const center = material.uniforms.uCenter?.value;
+		if (!mesh || !center) return;
+		mesh.getWorldPosition(center);
+	});
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("mesh", {
+		ref,
 		rotation: [
 			Math.PI / 2,
 			0,
 			0
 		],
 		material,
+		raycast: () => null,
 		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ringGeometry", { args: [
 			inner,
 			outer,
-			128
+			196
 		] })
 	});
 }
-function Moon({ satellite, onPick }) {
+function Moon({ satellite, map, onPick }) {
 	const ref = (0, import_react.useRef)(null);
+	const material = (0, import_react.useMemo)(() => createSurfaceMaterial({
+		map,
+		tint: satellite.color,
+		bump: satellite.radius > .07 ? 1.15 : .65,
+		gloss: 26,
+		specStrength: .05,
+		soft: .02,
+		limb: .04
+	}), [
+		map,
+		satellite.color,
+		satellite.radius
+	]);
+	(0, import_react.useEffect)(() => () => material.dispose(), [material]);
 	useFrame(() => {
 		const mesh = ref.current;
 		if (!mesh) return;
@@ -1111,20 +1448,13 @@ function Moon({ satellite, onPick }) {
 		mesh.position.set(Math.cos(theta) * satellite.orbit, 0, Math.sin(theta) * satellite.orbit);
 		mesh.rotation.y = theta;
 	});
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("mesh", {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("mesh", {
 		ref,
-		onClick: onPick,
-		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("sphereGeometry", { args: [
-			satellite.radius,
-			20,
-			16
-		] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("meshStandardMaterial", {
-			color: satellite.color,
-			roughness: .9,
-			metalness: 0,
-			emissive: satellite.color,
-			emissiveIntensity: .08
-		})]
+		geometry: unitSphere(),
+		material,
+		dispose: null,
+		scale: satellite.radius,
+		onClick: onPick
 	});
 }
 function BodyLabel({ name, lift }) {
@@ -1175,13 +1505,50 @@ function BodyLabel({ name, lift }) {
 		})
 	});
 }
-function PlanetBody({ planet }) {
+function PlanetBody({ planet, maps }) {
 	const group = (0, import_react.useRef)(null);
 	const spin = (0, import_react.useRef)(null);
 	const clouds = (0, import_react.useRef)(null);
 	const selected = useSolar((state) => state.selected === planet.id);
-	const map = (0, import_react.useMemo)(() => planetTexture(planet.texture), [planet.texture]);
-	const cloudsMap = (0, import_react.useMemo)(() => planet.texture === "earth" ? cloudTexture() : null, [planet.texture]);
+	const geometry = (0, import_react.useMemo)(() => unitSphere(), []);
+	const material = (0, import_react.useMemo)(() => {
+		const ring = planet.ring;
+		return createSurfaceMaterial({
+			map: maps[planet.texture],
+			night: planet.texture === "earth" ? maps.earthNight : null,
+			spec: planet.texture === "earth" ? maps.earthSpec : null,
+			normal: planet.texture === "earth" ? maps.earthNormal : null,
+			ring: ring && planet.id === "saturn" ? maps.saturnRing : null,
+			ringInner: ring ? ring.inner / planet.radius : 0,
+			ringOuter: ring ? ring.outer / planet.radius : 1,
+			bump: planet.texture === "mercury" || planet.texture === "mars" ? .85 : 0,
+			gloss: planet.texture === "earth" ? 96 : planet.texture === "venus" ? 14 : planet.kind.includes("gassoso") || planet.kind.includes("ghiaccio") ? 20 : 36,
+			specStrength: planet.texture === "venus" ? .22 : planet.kind.startsWith("Gigante") ? .16 : .05,
+			soft: planet.texture === "venus" ? .2 : planet.texture === "earth" ? .06 : planet.kind.startsWith("Gigante") ? .09 : .025,
+			limb: planet.texture === "venus" ? .42 : planet.kind.startsWith("Gigante") ? .5 : planet.texture === "earth" ? .12 : .05,
+			nightStrength: planet.texture === "earth" ? 2.35 : 0,
+			normalScale: .72
+		});
+	}, [maps, planet]);
+	const cloudMat = (0, import_react.useMemo)(() => planet.texture === "earth" ? createCloudMaterial(maps.earthClouds) : null, [maps.earthClouds, planet.texture]);
+	const atmo = ATMOS[planet.id];
+	const atmoMat = (0, import_react.useMemo)(() => atmo ? createAtmoMaterial(atmo.color, atmo.strength, atmo.power) : null, [atmo]);
+	const ringMat = (0, import_react.useMemo)(() => {
+		if (!planet.ring) return null;
+		if (planet.id === "saturn") return createTexturedRingMaterial(maps.saturnRing, planet.ring.inner, planet.ring.outer, planet.radius);
+		return createThinRingMaterial(planet.ring.inner, planet.ring.outer, planet.ring.color, planet.ring.opacity);
+	}, [maps.saturnRing, planet]);
+	(0, import_react.useEffect)(() => () => {
+		material.dispose();
+		cloudMat?.dispose();
+		atmoMat?.dispose();
+		ringMat?.dispose();
+	}, [
+		atmoMat,
+		cloudMat,
+		material,
+		ringMat
+	]);
 	useFrame(() => {
 		const anchor = group.current;
 		if (!anchor) return;
@@ -1192,7 +1559,7 @@ function PlanetBody({ planet }) {
 		slot.y = scratch.y;
 		slot.z = scratch.z;
 		if (spin.current) spin.current.rotation.y = sim.elapsed * planet.spin;
-		if (clouds.current) clouds.current.rotation.y = sim.elapsed * planet.spin * 1.2 + .4;
+		if (clouds.current) clouds.current.rotation.y = sim.elapsed * planet.spin * 1.15 + .4;
 	});
 	const pick = (event) => {
 		event.stopPropagation();
@@ -1213,8 +1580,12 @@ function PlanetBody({ planet }) {
 					planet.tilt
 				],
 				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("mesh", {
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("mesh", {
 						ref: spin,
+						geometry,
+						material,
+						dispose: null,
+						scale: planet.radius,
 						onClick: pick,
 						onPointerOver: (event) => {
 							event.stopPropagation();
@@ -1222,54 +1593,33 @@ function PlanetBody({ planet }) {
 						},
 						onPointerOut: () => {
 							document.body.style.cursor = "";
-						},
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("sphereGeometry", { args: [
-							planet.radius,
-							48,
-							32
-						] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("meshStandardMaterial", {
-							map,
-							roughness: .82,
-							metalness: .02,
-							emissive: planet.color,
-							emissiveIntensity: .16
-						})]
+						}
 					}),
-					cloudsMap ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("mesh", {
+					cloudMat ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("mesh", {
 						ref: clouds,
-						scale: 1.03,
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("sphereGeometry", { args: [
-							planet.radius,
-							40,
-							28
-						] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("meshStandardMaterial", {
-							map: cloudsMap,
-							transparent: true,
-							opacity: .9,
-							depthWrite: false,
-							roughness: 1,
-							metalness: 0
-						})]
+						geometry,
+						material: cloudMat,
+						dispose: null,
+						scale: planet.radius * 1.012,
+						raycast: () => null
 					}) : null,
-					planet.atmosphere ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("mesh", {
-						scale: 1.08,
-						raycast: () => null,
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("sphereGeometry", { args: [
-							planet.radius,
-							32,
-							24
-						] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("meshBasicMaterial", {
-							color: planet.atmosphere,
-							transparent: true,
-							opacity: .12,
-							depthWrite: false
-						})]
+					atmo && atmoMat ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("mesh", {
+						geometry,
+						material: atmoMat,
+						dispose: null,
+						scale: planet.radius * atmo.scale,
+						raycast: () => null
 					}) : null,
-					planet.ring ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Rings, { ...planet.ring }) : null
+					planet.ring && ringMat ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PlanetRings, {
+						material: ringMat,
+						inner: planet.ring.inner,
+						outer: planet.ring.outer
+					}) : null
 				]
 			}),
 			planet.satellites?.map((satellite) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Moon, {
 				satellite,
+				map: maps.moon,
 				onPick: pick
 			}, satellite.name)),
 			selected ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("mesh", {
@@ -1293,14 +1643,16 @@ function PlanetBody({ planet }) {
 		]
 	});
 }
-function Sun() {
+function Sun({ map }) {
 	const spin = (0, import_react.useRef)(null);
 	const glow = (0, import_react.useRef)(null);
-	const map = (0, import_react.useMemo)(() => glowTexture(), []);
+	const corona = (0, import_react.useMemo)(() => glowTexture(), []);
+	const material = (0, import_react.useMemo)(() => createSunMaterial(map), [map]);
+	(0, import_react.useEffect)(() => () => material.dispose(), [material]);
 	useFrame(() => {
-		if (spin.current) spin.current.rotation.y = sim.elapsed * .12;
+		if (spin.current) spin.current.rotation.y = sim.elapsed * .04;
 		if (glow.current) {
-			const scale = 9.2 + Math.sin(sim.elapsed * .85) * .28;
+			const scale = 11.4 + Math.sin(sim.elapsed * .85) * .22;
 			glow.current.scale.set(scale, scale, 1);
 		}
 	});
@@ -1316,21 +1668,22 @@ function Sun() {
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("sprite", {
 			ref: glow,
 			scale: [
-				9.2,
-				9.2,
+				11.4,
+				11.4,
 				1
 			],
 			raycast: () => null,
 			children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("spriteMaterial", {
-				map,
+				map: corona,
 				transparent: true,
 				depthWrite: false,
 				blending: 2,
 				toneMapped: false
 			})
 		}),
-		/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("mesh", {
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("mesh", {
 			ref: spin,
+			material,
 			onClick: pick,
 			onPointerOver: (event) => {
 				event.stopPropagation();
@@ -1339,35 +1692,17 @@ function Sun() {
 			onPointerOut: () => {
 				document.body.style.cursor = "";
 			},
-			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("sphereGeometry", { args: [
+			children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("sphereGeometry", { args: [
 				SUN.radius,
-				48,
-				32
-			] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("meshBasicMaterial", {
-				color: "#ffd28a",
-				toneMapped: false
-			})]
-		}),
-		/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("mesh", {
-			scale: 1.08,
-			raycast: () => null,
-			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("sphereGeometry", { args: [
-				SUN.radius,
-				32,
-				24
-			] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("meshBasicMaterial", {
-				color: "#ff9a3c",
-				transparent: true,
-				opacity: .28,
-				depthWrite: false,
-				toneMapped: false
-			})]
+				64,
+				48
+			] })
 		}),
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("pointLight", {
 			color: "#fff1cc",
-			intensity: 90,
-			distance: 160,
-			decay: 1.15
+			intensity: 70,
+			distance: 180,
+			decay: 1.2
 		})
 	] });
 }
@@ -1520,7 +1855,27 @@ function CameraRig() {
 	});
 }
 function Scene() {
-	const reduce = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+	const maps = useTexture({
+		mercury: "/cosmos/mercury.jpg",
+		venus: "/cosmos/venus.jpg",
+		earth: "/cosmos/earth_day.jpg",
+		mars: "/cosmos/mars.jpg",
+		jupiter: "/cosmos/jupiter.jpg",
+		saturn: "/cosmos/saturn.jpg",
+		uranus: "/cosmos/uranus.jpg",
+		neptune: "/cosmos/neptune.jpg",
+		earthNight: "/cosmos/earth_night.png",
+		earthSpec: "/cosmos/earth_spec.jpg",
+		earthNormal: "/cosmos/earth_normal.jpg",
+		earthClouds: "/cosmos/earth_clouds.png",
+		saturnRing: "/cosmos/saturn_ring.png",
+		sun: "/cosmos/sun.jpg",
+		moon: "/cosmos/moon.jpg",
+		stars: "/cosmos/sky.jpg"
+	});
+	(0, import_react.useLayoutEffect)(() => {
+		prepareMaps(maps);
+	}, [maps]);
 	(0, import_react.useEffect)(() => {
 		Object.assign(window, { __elios: () => {
 			const state = useSolar.getState();
@@ -1541,24 +1896,14 @@ function Scene() {
 			args: [SCENE]
 		}),
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Clock, {}),
-		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("ambientLight", { intensity: .22 }),
-		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("hemisphereLight", { args: [
-			"#24324a",
-			"#07080c",
-			.38
-		] }),
-		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stars, {
-			radius: 200,
-			depth: 70,
-			count: 2800,
-			factor: 3.4,
-			saturation: 0,
-			fade: true,
-			speed: reduce ? 0 : .18
-		}),
-		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sun, {}),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)("ambientLight", { intensity: .05 }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SkyField, { map: maps.stars }),
+		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sun, { map: maps.sun }),
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Belt, {}),
-		PLANETS.map((planet) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("group", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(OrbitTrail, { planet }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PlanetBody, { planet })] }, planet.id)),
+		PLANETS.map((planet) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("group", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(OrbitTrail, { planet }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PlanetBody, {
+			planet,
+			maps
+		})] }, planet.id)),
 		/* @__PURE__ */ (0, import_jsx_runtime.jsx)(CameraRig, {})
 	] });
 }
@@ -1572,7 +1917,7 @@ function Stage() {
 			],
 			fov: 42,
 			near: .08,
-			far: 500
+			far: 1400
 		},
 		dpr: [1, 1.6],
 		gl: {
@@ -1586,7 +1931,10 @@ function Stage() {
 			gl.outputColorSpace = SRGBColorSpace;
 			gl.domElement.style.touchAction = "none";
 		},
-		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Scene, {})
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react.Suspense, {
+			fallback: null,
+			children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Scene, {})
+		})
 	});
 }
 function Home() {

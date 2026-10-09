@@ -1,23 +1,22 @@
-import { OrbitControls, Line, Stars } from "@react-three/drei";
+import { Line, OrbitControls, useTexture } from "@react-three/drei";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
-import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import {
   AdditiveBlending,
   CanvasTexture,
-  Color,
   DodecahedronGeometry,
-  DoubleSide,
-  GLSL3,
   InstancedMesh,
   MeshStandardMaterial,
   Object3D,
-  ShaderMaterial,
   Sprite,
   SRGBColorSpace,
   Vector3,
   type Group,
   type Mesh,
+  type ShaderMaterial,
+  type Texture,
 } from "three";
+import { SkyField } from "@/components/solar/SkyField";
 import { place, placeTheta } from "@/solar/orbit";
 import {
   focusDistance,
@@ -29,7 +28,18 @@ import {
 } from "@/solar/planets";
 import { sim } from "@/solar/sim";
 import { useSolar } from "@/solar/store";
-import { cloudTexture, glowTexture, planetTexture } from "@/solar/textures";
+import {
+  createAtmoMaterial,
+  createCloudMaterial,
+  createSunMaterial,
+  createSurfaceMaterial,
+  createTexturedRingMaterial,
+  createThinRingMaterial,
+  prepareMaps,
+  unitSphere,
+  type CosmosMaps,
+} from "@/solar/surface";
+import { glowTexture } from "@/solar/textures";
 
 const HOME = new Vector3(0, 38, 88);
 const ORIGIN = new Vector3(0, 0, 0);
@@ -74,69 +84,63 @@ function OrbitTrail({ planet }: { planet: Planet }) {
   );
 }
 
-function Rings({
+const ATMOS: Partial<Record<BodyId, { color: string; strength: number; power: number; scale: number }>> = {
+  venus: { color: "#f3d7a6", strength: 0.78, power: 1.65, scale: 1.03 },
+  earth: { color: "#8eb6ff", strength: 0.9, power: 3.05, scale: 1.055 },
+  mars: { color: "#e8aa90", strength: 0.38, power: 3.3, scale: 1.026 },
+  jupiter: { color: "#e8c59a", strength: 0.48, power: 2.5, scale: 1.032 },
+  saturn: { color: "#f3e0b8", strength: 0.4, power: 2.7, scale: 1.028 },
+  uranus: { color: "#c5f4ee", strength: 0.62, power: 2.35, scale: 1.04 },
+  neptune: { color: "#7c97ff", strength: 0.7, power: 2.45, scale: 1.038 },
+};
+
+function PlanetRings({
+  material,
   inner,
   outer,
-  color,
-  opacity,
 }: {
+  material: ShaderMaterial;
   inner: number;
   outer: number;
-  color: string;
-  opacity: number;
 }) {
-  const material = useMemo(
-    () =>
-      new ShaderMaterial({
-        transparent: true,
-        side: DoubleSide,
-        depthWrite: false,
-        glslVersion: GLSL3,
-        uniforms: {
-          uColor: { value: new Color(color) },
-          uInner: { value: inner },
-          uOuter: { value: outer },
-          uOpacity: { value: opacity },
-        },
-        vertexShader: `
-          out vec2 vXy;
-          void main() {
-            vXy = position.xy;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-          }
-        `,
-        fragmentShader: `
-          in vec2 vXy;
-          uniform vec3 uColor;
-          uniform float uInner;
-          uniform float uOuter;
-          uniform float uOpacity;
-          out vec4 fragColor;
-          void main() {
-            float r = length(vXy);
-            float t = clamp((r - uInner) / max(0.0001, uOuter - uInner), 0.0, 1.0);
-            float bands = 0.55 + 0.45 * sin(t * 54.0 + sin(t * 17.0));
-            float gap = smoothstep(0.02, 0.0, abs(t - 0.48));
-            float edge = smoothstep(0.0, 0.04, t) * smoothstep(1.0, 0.9, t);
-            float alpha = uOpacity * bands * (1.0 - gap * 0.9) * edge;
-            fragColor = vec4(uColor, alpha);
-          }
-        `,
-      }),
-    [color, inner, opacity, outer],
-  );
-
-  useEffect(() => () => material.dispose(), [material]);
-
+  const ref = useRef<Mesh>(null);
+  useFrame(() => {
+    const mesh = ref.current;
+    const center = material.uniforms.uCenter?.value as Vector3 | undefined;
+    if (!mesh || !center) return;
+    mesh.getWorldPosition(center);
+  });
   return (
-    <mesh rotation={[Math.PI / 2, 0, 0]} material={material}>
-      <ringGeometry args={[inner, outer, 128]} />
+    <mesh ref={ref} rotation={[Math.PI / 2, 0, 0]} material={material} raycast={() => null}>
+      <ringGeometry args={[inner, outer, 196]} />
     </mesh>
   );
 }
 
-function Moon({ satellite, onPick }: { satellite: Satellite; onPick: (event: ThreeEvent<MouseEvent>) => void }) {
+function Moon({
+  satellite,
+  map,
+  onPick,
+}: {
+  satellite: Satellite;
+  map: Texture;
+  onPick: (event: ThreeEvent<MouseEvent>) => void;
+}) {
   const ref = useRef<Mesh>(null);
+  const material = useMemo(
+    () =>
+      createSurfaceMaterial({
+        map,
+        tint: satellite.color,
+        bump: satellite.radius > 0.07 ? 1.15 : 0.65,
+        gloss: 26,
+        specStrength: 0.05,
+        soft: 0.02,
+        limb: 0.04,
+      }),
+    [map, satellite.color, satellite.radius],
+  );
+  useEffect(() => () => material.dispose(), [material]);
   useFrame(() => {
     const mesh = ref.current;
     if (!mesh) return;
@@ -146,10 +150,7 @@ function Moon({ satellite, onPick }: { satellite: Satellite; onPick: (event: Thr
   });
 
   return (
-    <mesh ref={ref} onClick={onPick}>
-      <sphereGeometry args={[satellite.radius, 20, 16]} />
-      <meshStandardMaterial color={satellite.color} roughness={0.9} metalness={0} emissive={satellite.color} emissiveIntensity={0.08} />
-    </mesh>
+    <mesh ref={ref} geometry={unitSphere()} material={material} dispose={null} scale={satellite.radius} onClick={onPick} />
   );
 }
 
@@ -196,13 +197,57 @@ function BodyLabel({ name, lift }: { name: string; lift: number }) {
   );
 }
 
-function PlanetBody({ planet }: { planet: Planet }) {
+function PlanetBody({ planet, maps }: { planet: Planet; maps: CosmosMaps }) {
   const group = useRef<Group>(null);
   const spin = useRef<Mesh>(null);
   const clouds = useRef<Mesh>(null);
   const selected = useSolar((state) => state.selected === planet.id);
-  const map = useMemo(() => planetTexture(planet.texture), [planet.texture]);
-  const cloudsMap = useMemo(() => (planet.texture === "earth" ? cloudTexture() : null), [planet.texture]);
+  const geometry = useMemo(() => unitSphere(), []);
+  const material = useMemo(() => {
+    const ring = planet.ring;
+    return createSurfaceMaterial({
+      map: maps[planet.texture],
+      night: planet.texture === "earth" ? maps.earthNight : null,
+      spec: planet.texture === "earth" ? maps.earthSpec : null,
+      normal: planet.texture === "earth" ? maps.earthNormal : null,
+      ring: ring && planet.id === "saturn" ? maps.saturnRing : null,
+      ringInner: ring ? ring.inner / planet.radius : 0,
+      ringOuter: ring ? ring.outer / planet.radius : 1,
+      bump: planet.texture === "mercury" || planet.texture === "mars" ? 0.85 : 0,
+      gloss: planet.texture === "earth" ? 96 : planet.texture === "venus" ? 14 : planet.kind.includes("gassoso") || planet.kind.includes("ghiaccio") ? 20 : 36,
+      specStrength: planet.texture === "venus" ? 0.22 : planet.kind.startsWith("Gigante") ? 0.16 : 0.05,
+      soft: planet.texture === "venus" ? 0.2 : planet.texture === "earth" ? 0.06 : planet.kind.startsWith("Gigante") ? 0.09 : 0.025,
+      limb: planet.texture === "venus" ? 0.42 : planet.kind.startsWith("Gigante") ? 0.5 : planet.texture === "earth" ? 0.12 : 0.05,
+      nightStrength: planet.texture === "earth" ? 2.35 : 0,
+      normalScale: 0.72,
+    });
+  }, [maps, planet]);
+  const cloudMat = useMemo(
+    () => (planet.texture === "earth" ? createCloudMaterial(maps.earthClouds) : null),
+    [maps.earthClouds, planet.texture],
+  );
+  const atmo = ATMOS[planet.id];
+  const atmoMat = useMemo(
+    () => (atmo ? createAtmoMaterial(atmo.color, atmo.strength, atmo.power) : null),
+    [atmo],
+  );
+  const ringMat = useMemo(() => {
+    if (!planet.ring) return null;
+    if (planet.id === "saturn") {
+      return createTexturedRingMaterial(maps.saturnRing, planet.ring.inner, planet.ring.outer, planet.radius);
+    }
+    return createThinRingMaterial(planet.ring.inner, planet.ring.outer, planet.ring.color, planet.ring.opacity);
+  }, [maps.saturnRing, planet]);
+
+  useEffect(
+    () => () => {
+      material.dispose();
+      cloudMat?.dispose();
+      atmoMat?.dispose();
+      ringMat?.dispose();
+    },
+    [atmoMat, cloudMat, material, ringMat],
+  );
 
   useFrame(() => {
     const anchor = group.current;
@@ -214,7 +259,7 @@ function PlanetBody({ planet }: { planet: Planet }) {
     slot.y = scratch.y;
     slot.z = scratch.z;
     if (spin.current) spin.current.rotation.y = sim.elapsed * planet.spin;
-    if (clouds.current) clouds.current.rotation.y = sim.elapsed * planet.spin * 1.2 + 0.4;
+    if (clouds.current) clouds.current.rotation.y = sim.elapsed * planet.spin * 1.15 + 0.4;
   });
 
   const pick = (event: ThreeEvent<MouseEvent>) => {
@@ -229,6 +274,10 @@ function PlanetBody({ planet }: { planet: Planet }) {
       <group rotation={[0, 0, planet.tilt]}>
         <mesh
           ref={spin}
+          geometry={geometry}
+          material={material}
+          dispose={null}
+          scale={planet.radius}
           onClick={pick}
           onPointerOver={(event) => {
             event.stopPropagation();
@@ -237,39 +286,19 @@ function PlanetBody({ planet }: { planet: Planet }) {
           onPointerOut={() => {
             document.body.style.cursor = "";
           }}
-        >
-          <sphereGeometry args={[planet.radius, 48, 32]} />
-          <meshStandardMaterial
-            map={map}
-            roughness={0.82}
-            metalness={0.02}
-            emissive={planet.color}
-            emissiveIntensity={0.16}
-          />
-        </mesh>
-        {cloudsMap ? (
-          <mesh ref={clouds} scale={1.03}>
-            <sphereGeometry args={[planet.radius, 40, 28]} />
-            <meshStandardMaterial
-              map={cloudsMap}
-              transparent
-              opacity={0.9}
-              depthWrite={false}
-              roughness={1}
-              metalness={0}
-            />
-          </mesh>
+        />
+        {cloudMat ? (
+          <mesh ref={clouds} geometry={geometry} material={cloudMat} dispose={null} scale={planet.radius * 1.012} raycast={() => null} />
         ) : null}
-        {planet.atmosphere ? (
-          <mesh scale={1.08} raycast={() => null}>
-            <sphereGeometry args={[planet.radius, 32, 24]} />
-            <meshBasicMaterial color={planet.atmosphere} transparent opacity={0.12} depthWrite={false} />
-          </mesh>
+        {atmo && atmoMat ? (
+          <mesh geometry={geometry} material={atmoMat} dispose={null} scale={planet.radius * atmo.scale} raycast={() => null} />
         ) : null}
-        {planet.ring ? <Rings {...planet.ring} /> : null}
+        {planet.ring && ringMat ? (
+          <PlanetRings material={ringMat} inner={planet.ring.inner} outer={planet.ring.outer} />
+        ) : null}
       </group>
       {planet.satellites?.map((satellite) => (
-        <Moon key={satellite.name} satellite={satellite} onPick={pick} />
+        <Moon key={satellite.name} satellite={satellite} map={maps.moon} onPick={pick} />
       ))}
       {selected ? (
         <mesh rotation={[Math.PI / 2, 0, 0]} raycast={() => null}>
@@ -281,15 +310,17 @@ function PlanetBody({ planet }: { planet: Planet }) {
   );
 }
 
-function Sun() {
+function Sun({ map }: { map: Texture }) {
   const spin = useRef<Mesh>(null);
   const glow = useRef<Sprite>(null);
-  const map = useMemo(() => glowTexture(), []);
+  const corona = useMemo(() => glowTexture(), []);
+  const material = useMemo(() => createSunMaterial(map), [map]);
+  useEffect(() => () => material.dispose(), [material]);
 
   useFrame(() => {
-    if (spin.current) spin.current.rotation.y = sim.elapsed * 0.12;
+    if (spin.current) spin.current.rotation.y = sim.elapsed * 0.04;
     if (glow.current) {
-      const scale = 9.2 + Math.sin(sim.elapsed * 0.85) * 0.28;
+      const scale = 11.4 + Math.sin(sim.elapsed * 0.85) * 0.22;
       glow.current.scale.set(scale, scale, 1);
     }
   });
@@ -302,11 +333,12 @@ function Sun() {
   return (
     <group>
       <BodyLabel name={SUN.name} lift={SUN.radius + 0.7} />
-      <sprite ref={glow} scale={[9.2, 9.2, 1]} raycast={() => null}>
-        <spriteMaterial map={map} transparent depthWrite={false} blending={AdditiveBlending} toneMapped={false} />
+      <sprite ref={glow} scale={[11.4, 11.4, 1]} raycast={() => null}>
+        <spriteMaterial map={corona} transparent depthWrite={false} blending={AdditiveBlending} toneMapped={false} />
       </sprite>
       <mesh
         ref={spin}
+        material={material}
         onClick={pick}
         onPointerOver={(event) => {
           event.stopPropagation();
@@ -316,14 +348,9 @@ function Sun() {
           document.body.style.cursor = "";
         }}
       >
-        <sphereGeometry args={[SUN.radius, 48, 32]} />
-        <meshBasicMaterial color="#ffd28a" toneMapped={false} />
+        <sphereGeometry args={[SUN.radius, 64, 48]} />
       </mesh>
-      <mesh scale={1.08} raycast={() => null}>
-        <sphereGeometry args={[SUN.radius, 32, 24]} />
-        <meshBasicMaterial color="#ff9a3c" transparent opacity={0.28} depthWrite={false} toneMapped={false} />
-      </mesh>
-      <pointLight color="#fff1cc" intensity={90} distance={160} decay={1.15} />
+      <pointLight color="#fff1cc" intensity={70} distance={180} decay={1.2} />
     </group>
   );
 }
@@ -483,8 +510,28 @@ function CameraRig() {
 }
 
 function Scene() {
-  const reduce =
-    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const maps = useTexture({
+    mercury: "/cosmos/mercury.jpg",
+    venus: "/cosmos/venus.jpg",
+    earth: "/cosmos/earth_day.jpg",
+    mars: "/cosmos/mars.jpg",
+    jupiter: "/cosmos/jupiter.jpg",
+    saturn: "/cosmos/saturn.jpg",
+    uranus: "/cosmos/uranus.jpg",
+    neptune: "/cosmos/neptune.jpg",
+    earthNight: "/cosmos/earth_night.png",
+    earthSpec: "/cosmos/earth_spec.jpg",
+    earthNormal: "/cosmos/earth_normal.jpg",
+    earthClouds: "/cosmos/earth_clouds.png",
+    saturnRing: "/cosmos/saturn_ring.png",
+    sun: "/cosmos/sun.jpg",
+    moon: "/cosmos/moon.jpg",
+    stars: "/cosmos/sky.jpg",
+  }) as CosmosMaps;
+
+  useLayoutEffect(() => {
+    prepareMaps(maps);
+  }, [maps]);
 
   useEffect(() => {
     Object.assign(window, {
@@ -507,15 +554,14 @@ function Scene() {
     <>
       <color attach="background" args={[SCENE]} />
       <Clock />
-      <ambientLight intensity={0.22} />
-      <hemisphereLight args={["#24324a", "#07080c", 0.38]} />
-      <Stars radius={200} depth={70} count={2800} factor={3.4} saturation={0} fade speed={reduce ? 0 : 0.18} />
-      <Sun />
+      <ambientLight intensity={0.05} />
+      <SkyField map={maps.stars} />
+      <Sun map={maps.sun} />
       <Belt />
       {PLANETS.map((planet) => (
         <group key={planet.id}>
           <OrbitTrail planet={planet} />
-          <PlanetBody planet={planet} />
+          <PlanetBody planet={planet} maps={maps} />
         </group>
       ))}
       <CameraRig />
@@ -526,7 +572,7 @@ function Scene() {
 export default function Stage() {
   return (
     <Canvas
-      camera={{ position: [HOME.x, HOME.y, HOME.z], fov: 42, near: 0.08, far: 500 }}
+      camera={{ position: [HOME.x, HOME.y, HOME.z], fov: 42, near: 0.08, far: 1400 }}
       dpr={[1, 1.6]}
       gl={{
         antialias: true,
@@ -540,7 +586,9 @@ export default function Stage() {
         gl.domElement.style.touchAction = "none";
       }}
     >
-      <Scene />
+      <Suspense fallback={null}>
+        <Scene />
+      </Suspense>
     </Canvas>
   );
 }

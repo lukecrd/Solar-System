@@ -68,6 +68,7 @@ export function Hud() {
           <p className="kicker">Osservatorio</p>
           <h1>Elios</h1>
           <p className="sub">Sistema solare. Clicca un pianeta: la camera lo segue.</p>
+          <p className="credit">Superfici e Via Lattea: NASA · Solar System Scope</p>
         </div>
         <div className="glass clock" aria-live="polite">
           <strong>{paused ? "In pausa" : date}</strong>

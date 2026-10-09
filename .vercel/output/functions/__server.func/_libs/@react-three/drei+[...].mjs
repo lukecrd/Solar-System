@@ -61309,10 +61309,10 @@ function Canvas(props) {
 }
 //#endregion
 //#region node_modules/three-stdlib/_polyfill/constants.js
-var version$1 = /* @__PURE__ */ (() => parseInt("186".replace(/\D+/g, "")))();
+var version = /* @__PURE__ */ (() => parseInt("186".replace(/\D+/g, "")))();
 //#endregion
 //#region node_modules/three-stdlib/_polyfill/uv1.js
-var UV1 = version$1 >= 125 ? "uv1" : "uv2";
+var UV1 = version >= 125 ? "uv1" : "uv2";
 //#endregion
 //#region node_modules/three-stdlib/controls/EventDispatcher.js
 var __defProp$1 = Object.defineProperty;
@@ -62749,7 +62749,7 @@ var LineMaterial = class extends ShaderMaterial {
 					gl_FragColor = diffuseColor;
 
 					#include <tonemapping_fragment>
-					#include <${version$1 >= 154 ? "colorspace_fragment" : "encodings_fragment"}>
+					#include <${version >= 154 ? "colorspace_fragment" : "encodings_fragment"}>
 					#include <fog_fragment>
 					#include <premultiplied_alpha_fragment>
 
@@ -63142,9 +63142,36 @@ var Line = /* @__PURE__ */ import_react.forwardRef(function Line({ points, color
 	}, rest)));
 });
 //#endregion
-//#region node_modules/@react-three/drei/helpers/constants.js
-var getVersion = () => parseInt("186".replace(/\D+/g, ""));
-var version = /* @__PURE__ */ getVersion();
+//#region node_modules/@react-three/drei/core/Texture.js
+var IsObject = (url) => url === Object(url) && !Array.isArray(url) && typeof url !== "function";
+function useTexture(input, onLoad) {
+	const gl = useThree((state) => state.gl);
+	const textures = useLoader(TextureLoader, IsObject(input) ? Object.values(input) : input);
+	(0, import_react.useLayoutEffect)(() => {
+		onLoad?.(textures);
+	}, [onLoad]);
+	(0, import_react.useEffect)(() => {
+		if ("initTexture" in gl) {
+			let textureArray = [];
+			if (Array.isArray(textures)) textureArray = textures;
+			else if (textures instanceof Texture) textureArray = [textures];
+			else if (IsObject(textures)) textureArray = Object.values(textures);
+			textureArray.forEach((texture) => {
+				if (texture instanceof Texture) gl.initTexture(texture);
+			});
+		}
+	}, [gl, textures]);
+	return (0, import_react.useMemo)(() => {
+		if (IsObject(input)) {
+			const keyed = {};
+			let i = 0;
+			for (const key in input) keyed[key] = textures[i++];
+			return keyed;
+		} else return textures;
+	}, [input, textures]);
+}
+useTexture.preload = (url) => useLoader.preload(TextureLoader, url);
+useTexture.clear = (input) => useLoader.clear(TextureLoader, input);
 //#endregion
 //#region node_modules/@react-three/drei/core/OrbitControls.js
 var OrbitControls = /* @__PURE__ */ import_react.forwardRef(({ makeDefault, camera, regress, domElement, enableDamping = true, keyEvents = false, onChange, onStart, onEnd, ...restProps }, ref) => {
@@ -63215,93 +63242,4 @@ var OrbitControls = /* @__PURE__ */ import_react.forwardRef(({ makeDefault, came
 	}, restProps));
 });
 //#endregion
-//#region node_modules/@react-three/drei/core/Stars.js
-var StarfieldMaterial = class extends ShaderMaterial {
-	constructor() {
-		super({
-			uniforms: {
-				time: { value: 0 },
-				fade: { value: 1 }
-			},
-			vertexShader: `
-      uniform float time;
-      attribute float size;
-      varying vec3 vColor;
-      void main() {
-        vColor = color;
-        vec4 mvPosition = modelViewMatrix * vec4(position, 0.5);
-        gl_PointSize = size * (30.0 / -mvPosition.z) * (3.0 + sin(time + 100.0));
-        gl_Position = projectionMatrix * mvPosition;
-      }`,
-			fragmentShader: `
-      uniform sampler2D pointTexture;
-      uniform float fade;
-      varying vec3 vColor;
-      void main() {
-        float opacity = 1.0;
-        if (fade == 1.0) {
-          float d = distance(gl_PointCoord, vec2(0.5, 0.5));
-          opacity = 1.0 / (1.0 + exp(16.0 * (d - 0.25)));
-        }
-        gl_FragColor = vec4(vColor, opacity);
-
-        #include <tonemapping_fragment>
-	      #include <${version >= 154 ? "colorspace_fragment" : "encodings_fragment"}>
-      }`
-		});
-	}
-};
-var genStar = (r) => {
-	return new Vector3().setFromSpherical(new Spherical(r, Math.acos(1 - Math.random() * 2), Math.random() * 2 * Math.PI));
-};
-var Stars = /* @__PURE__ */ import_react.forwardRef(({ radius = 100, depth = 50, count = 5e3, saturation = 0, factor = 4, fade = false, speed = 1 }, ref) => {
-	const material = import_react.useRef(null);
-	const [position, color, size] = import_react.useMemo(() => {
-		const positions = [];
-		const colors = [];
-		const sizes = Array.from({ length: count }, () => (.5 + .5 * Math.random()) * factor);
-		const color = new Color();
-		let r = radius + depth;
-		const increment = depth / count;
-		for (let i = 0; i < count; i++) {
-			r -= increment * Math.random();
-			positions.push(...genStar(r).toArray());
-			color.setHSL(i / count, saturation, .9);
-			colors.push(color.r, color.g, color.b);
-		}
-		return [
-			new Float32Array(positions),
-			new Float32Array(colors),
-			new Float32Array(sizes)
-		];
-	}, [
-		count,
-		depth,
-		factor,
-		radius,
-		saturation
-	]);
-	useFrame((state) => material.current && (material.current.uniforms.time.value = state.clock.elapsedTime * speed));
-	const [starfieldMaterial] = import_react.useState(() => new StarfieldMaterial());
-	return /*#__PURE__*/ import_react.createElement("points", { ref }, /*#__PURE__*/ import_react.createElement("bufferGeometry", null, /*#__PURE__*/ import_react.createElement("bufferAttribute", {
-		attach: "attributes-position",
-		args: [position, 3]
-	}), /*#__PURE__*/ import_react.createElement("bufferAttribute", {
-		attach: "attributes-color",
-		args: [color, 3]
-	}), /*#__PURE__*/ import_react.createElement("bufferAttribute", {
-		attach: "attributes-size",
-		args: [size, 1]
-	})), /*#__PURE__*/ import_react.createElement("primitive", {
-		ref: material,
-		object: starfieldMaterial,
-		attach: "material",
-		blending: 2,
-		"uniforms-fade-value": fade,
-		depthWrite: false,
-		transparent: true,
-		vertexColors: true
-	}));
-});
-//#endregion
-export { Vector3 as _, useFrame as a, require_jsx_runtime as b, ClampToEdgeWrapping as c, GLSL3 as d, MeshStandardMaterial as f, ShaderMaterial as g, SRGBColorSpace as h, Canvas as i, Color as l, RepeatWrapping as m, OrbitControls as n, useThree as o, Object3D as p, Line as r, CanvasTexture as s, Stars as t, DodecahedronGeometry as u, createStore$1 as v, require_react as x, require_with_selector as y };
+export { require_jsx_runtime as C, require_with_selector as S, SRGBColorSpace as _, useFrame as a, Vector3 as b, BufferGeometry as c, Color as d, DodecahedronGeometry as f, RepeatWrapping as g, Object3D as h, Canvas as i, CanvasTexture as l, MeshStandardMaterial as m, useTexture as n, useThree as o, GLSL3 as p, Line as r, BufferAttribute as s, OrbitControls as t, ClampToEdgeWrapping as u, ShaderMaterial as v, require_react as w, createStore$1 as x, SphereGeometry as y };

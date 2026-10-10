@@ -26,6 +26,8 @@ export function Hud() {
   const setTrails = useSolar((state) => state.setTrails);
   const setLabels = useSolar((state) => state.setLabels);
   const select = useSolar((state) => state.select);
+  const sky = useSolar((state) => state.sky);
+  const pickSky = useSolar((state) => state.pickSky);
   const [date, setDate] = useState(() => formatDate(0));
 
   useEffect(() => {
@@ -67,12 +69,26 @@ export function Hud() {
         <div className="wordmark">
           <p className="kicker">Osservatorio</p>
           <h1>Elios</h1>
-          <p className="sub">Sistema solare. Clicca un pianeta: la camera lo segue.</p>
-          <p className="credit">Superfici e Via Lattea: NASA · Solar System Scope</p>
+          <p className="sub">Carta del cielo. Clicca una stella, una costellazione o una galassia.</p>
+          <p className="credit">Hipparcos · Messier · Via Lattea</p>
         </div>
-        <div className="glass clock" aria-live="polite">
-          <strong>{paused ? "In pausa" : date}</strong>
-          <span>{paused ? date : "tempo compresso"}</span>
+        <div className="top-side">
+          <div className="glass clock" aria-live="polite">
+            <strong>{paused ? "In pausa" : date}</strong>
+            <span>{paused ? date : "tempo compresso"}</span>
+          </div>
+          {sky ? (
+            <article className="glass sky-chip" aria-live="polite">
+              <div>
+                <p className="kind">{sky.kind}</p>
+                <strong>{sky.name}</strong>
+                <span>{sky.detail}</span>
+              </div>
+              <button type="button" className="icon-btn" aria-label="Chiudi scheda celeste" onClick={() => pickSky(null)}>
+                <X size={16} />
+              </button>
+            </article>
+          ) : null}
         </div>
       </header>
 
@@ -145,6 +161,7 @@ export function Hud() {
               step={0.1}
               value={speed}
               aria-valuetext={`${speed.toFixed(1)} volte`}
+              suppressHydrationWarning
               onChange={(event) => setSpeed(Number(event.target.value))}
             />
             <output>{speed.toFixed(1)}×</output>

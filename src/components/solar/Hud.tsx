@@ -15,6 +15,11 @@ function formatDate(elapsed: number) {
   }).format(new Date(stamp));
 }
 
+const SPEED_MIN = 0.2;
+const SPEED_MAX = 12;
+const clampSpeed = (value: number) =>
+  Math.round(Math.min(SPEED_MAX, Math.max(SPEED_MIN, value)) * 10) / 10;
+
 export function Hud() {
   const paused = useSolar((state) => state.paused);
   const speed = useSolar((state) => state.speed);
@@ -43,18 +48,34 @@ export function Hud() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const tag = (event.target as HTMLElement | null)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "BUTTON") return;
+      if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented) return;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "TEXTAREA" || target?.isContentEditable) return;
+      // Range input keeps its own arrow/Home/End keys; other shortcuts still work.
+      if (tag === "INPUT" && (target as HTMLInputElement).type !== "range") return;
+      const state = useSolar.getState();
       if (event.code === "Space") {
+        // Let focused buttons activate natively with Space.
+        if (tag === "BUTTON" || event.repeat) return;
         event.preventDefault();
-        useSolar.getState().togglePaused();
+        state.togglePaused();
       } else if (event.key === "Escape") {
-        useSolar.getState().select(null);
+        if (state.sky) state.pickSky(null);
+        else state.select(null);
       } else if (event.key === "0") {
-        useSolar.getState().select("sun");
+        state.select("sun");
       } else if (event.key >= "1" && event.key <= "8") {
         const planet = PLANETS[Number(event.key) - 1];
-        if (planet) useSolar.getState().select(planet.id);
+        if (planet) state.select(planet.id);
+      } else if (event.key === "+" || event.key === "=" || event.key === "]") {
+        state.setSpeed(clampSpeed(state.speed * 1.25));
+      } else if (event.key === "-" || event.key === "_" || event.key === "[") {
+        state.setSpeed(clampSpeed(state.speed / 1.25));
+      } else if (event.key === "t" || event.key === "T") {
+        state.setTrails(!state.trails);
+      } else if (event.key === "l" || event.key === "L") {
+        state.setLabels(!state.labels);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -73,9 +94,13 @@ export function Hud() {
           <p className="credit">Hipparcos · Messier · Via Lattea</p>
         </div>
         <div className="top-side">
-          <div className="glass clock" aria-live="polite">
+          {/* The date ticks every 200ms, so only the pause state is announced. */}
+          <div className="glass clock">
             <strong>{paused ? "In pausa" : date}</strong>
             <span>{paused ? date : "tempo compresso"}</span>
+            <span className="sr-only" role="status">
+              {paused ? "Simulazione in pausa" : "Simulazione in corso"}
+            </span>
           </div>
           {sky ? (
             <article className="glass sky-chip" aria-live="polite">
@@ -85,7 +110,7 @@ export function Hud() {
                 <span>{sky.detail}</span>
               </div>
               <button type="button" className="icon-btn" aria-label="Chiudi scheda celeste" onClick={() => pickSky(null)}>
-                <X size={16} />
+                <X size={16} aria-hidden="true" />
               </button>
             </article>
           ) : null}
@@ -99,9 +124,10 @@ export function Hud() {
             type="button"
             className="nav-btn"
             data-active={selected === item.id}
+            aria-pressed={selected === item.id}
             onClick={() => select(item.id as BodyId)}
           >
-            <span className="swatch" style={{ background: item.color }} />
+            <span className="swatch" aria-hidden="true" style={{ background: item.color }} />
             {item.name}
           </button>
         ))}
@@ -115,7 +141,7 @@ export function Hud() {
               <h2>{body.name}</h2>
             </div>
             <button type="button" className="icon-btn" aria-label="Chiudi scheda" onClick={() => select(null)}>
-              <X size={18} />
+              <X size={18} aria-hidden="true" />
             </button>
           </div>
           <p className="blurb">{body.blurb}</p>
@@ -143,12 +169,18 @@ export function Hud() {
             data-on={paused ? "false" : "true"}
             aria-pressed={!paused}
             aria-label={paused ? "Riprendi simulazione" : "Metti in pausa"}
+            title={paused ? "Riprendi (Spazio)" : "Pausa (Spazio)"}
             onClick={togglePaused}
           >
-            {paused ? <Play size={18} /> : <Pause size={18} />}
+            {paused ? <Play size={18} aria-hidden="true" /> : <Pause size={18} aria-hidden="true" />}
           </button>
-          <button type="button" className="text-btn" onClick={() => select(null)}>
-            <Orbit size={16} />
+          <button
+            type="button"
+            className="text-btn"
+            title="Vista d’insieme (Esc)"
+            onClick={() => select(null)}
+          >
+            <Orbit size={16} aria-hidden="true" />
             Vista
           </button>
           <div className="speed">
@@ -156,15 +188,15 @@ export function Hud() {
             <input
               id="speed"
               type="range"
-              min={0.2}
-              max={12}
+              min={SPEED_MIN}
+              max={SPEED_MAX}
               step={0.1}
               value={speed}
               aria-valuetext={`${speed.toFixed(1)} volte`}
               suppressHydrationWarning
               onChange={(event) => setSpeed(Number(event.target.value))}
             />
-            <output>{speed.toFixed(1)}×</output>
+            <output htmlFor="speed">{speed.toFixed(1)}×</output>
           </div>
         </div>
         <div className="toggles">
@@ -173,9 +205,10 @@ export function Hud() {
             className="text-btn"
             data-on={trails}
             aria-pressed={trails}
+            title="Sentieri orbitali (T)"
             onClick={() => setTrails(!trails)}
           >
-            <Route size={16} />
+            <Route size={16} aria-hidden="true" />
             Sentieri
           </button>
           <button
@@ -183,13 +216,14 @@ export function Hud() {
             className="text-btn"
             data-on={labels}
             aria-pressed={labels}
+            title="Etichette (L)"
             onClick={() => setLabels(!labels)}
           >
-            <Tag size={16} />
+            <Tag size={16} aria-hidden="true" />
             Etichette
           </button>
         </div>
-        <p className="keys">Spazio pausa · Esc vista · 0–8 corpi</p>
+        <p className="keys">Spazio pausa · Esc vista · 0–8 corpi · +/− velocità · T sentieri · L etichette</p>
       </footer>
     </>
   );

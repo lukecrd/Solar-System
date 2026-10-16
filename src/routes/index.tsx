@@ -11,7 +11,11 @@ function Home() {
 
   return (
     <main className="app-shell">
-      <div className="stage">{ready ? <Stage /> : null}</div>
+      <div
+        className="stage"
+        role="img"
+        aria-label="Vista 3D del sistema solare: trascina per ruotare, usa la barra dei corpi per navigare"
+      >{ready ? <Stage /> : null}</div>
       <Hud />
     </main>
   );

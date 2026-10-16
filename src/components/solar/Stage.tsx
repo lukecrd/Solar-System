@@ -37,6 +37,7 @@ import {
   createThinRingMaterial,
   prepareMaps,
   unitSphere,
+  unitSphereLow,
   type CosmosMaps,
 } from "@/solar/surface";
 import { glowTexture } from "@/solar/textures";
@@ -60,7 +61,8 @@ function Clock() {
 }
 
 function OrbitTrail({ planet }: { planet: Planet }) {
-  const selected = useSolar((state) => state.selected);
+  // Boolean selector: only the trails whose highlight actually flips re-render on selection.
+  const active = useSolar((state) => state.selected === planet.id);
   const trails = useSolar((state) => state.trails);
   const points = useMemo(() => {
     const sampled: [number, number, number][] = [];
@@ -72,7 +74,6 @@ function OrbitTrail({ planet }: { planet: Planet }) {
     return sampled;
   }, [planet]);
   if (!trails) return null;
-  const active = selected === planet.id;
   return (
     <Line
       points={points}
@@ -146,11 +147,11 @@ function Moon({
     if (!mesh) return;
     const theta = (sim.elapsed / satellite.period) * Math.PI * 2 + satellite.phase;
     mesh.position.set(Math.cos(theta) * satellite.orbit, 0, Math.sin(theta) * satellite.orbit);
-    mesh.rotation.y = theta;
+    mesh.rotation.y = -theta; // tidally locked: same face toward the planet
   });
 
   return (
-    <mesh ref={ref} geometry={unitSphere()} material={material} dispose={null} scale={satellite.radius} onClick={onPick} />
+    <mesh ref={ref} geometry={unitSphereLow()} material={material} dispose={null} scale={satellite.radius} onClick={onPick} />
   );
 }
 
@@ -318,7 +319,7 @@ function Sun({ map }: { map: Texture }) {
   useEffect(() => () => material.dispose(), [material]);
 
   useFrame(() => {
-    if (spin.current) spin.current.rotation.y = sim.elapsed * 0.04;
+    if (spin.current) spin.current.rotation.y = -sim.elapsed * 0.04;
     if (glow.current) {
       const scale = 11.4 + Math.sin(sim.elapsed * 0.85) * 0.22;
       glow.current.scale.set(scale, scale, 1);
@@ -509,25 +510,30 @@ function CameraRig() {
   );
 }
 
+// Module-level so useTexture keeps a stable result: an inline object literal would
+// produce a new `maps` on every Scene render, re-running prepareMaps (re-uploading
+// every texture) and rebuilding every planet material.
+const MAP_URLS = {
+  mercury: "/cosmos/mercury.jpg",
+  venus: "/cosmos/venus.jpg",
+  earth: "/cosmos/earth_day.jpg",
+  mars: "/cosmos/mars.jpg",
+  jupiter: "/cosmos/jupiter.jpg",
+  saturn: "/cosmos/saturn.jpg",
+  uranus: "/cosmos/uranus.jpg",
+  neptune: "/cosmos/neptune.jpg",
+  earthNight: "/cosmos/earth_night.png",
+  earthSpec: "/cosmos/earth_spec.jpg",
+  earthNormal: "/cosmos/earth_normal.jpg",
+  earthClouds: "/cosmos/earth_clouds.png",
+  saturnRing: "/cosmos/saturn_ring.png",
+  sun: "/cosmos/sun.jpg",
+  moon: "/cosmos/moon.jpg",
+  stars: "/cosmos/sky.jpg",
+};
+
 function Scene() {
-  const maps = useTexture({
-    mercury: "/cosmos/mercury.jpg",
-    venus: "/cosmos/venus.jpg",
-    earth: "/cosmos/earth_day.jpg",
-    mars: "/cosmos/mars.jpg",
-    jupiter: "/cosmos/jupiter.jpg",
-    saturn: "/cosmos/saturn.jpg",
-    uranus: "/cosmos/uranus.jpg",
-    neptune: "/cosmos/neptune.jpg",
-    earthNight: "/cosmos/earth_night.png",
-    earthSpec: "/cosmos/earth_spec.jpg",
-    earthNormal: "/cosmos/earth_normal.jpg",
-    earthClouds: "/cosmos/earth_clouds.png",
-    saturnRing: "/cosmos/saturn_ring.png",
-    sun: "/cosmos/sun.jpg",
-    moon: "/cosmos/moon.jpg",
-    stars: "/cosmos/sky.jpg",
-  }) as CosmosMaps;
+  const maps = useTexture(MAP_URLS) as CosmosMaps;
 
   useLayoutEffect(() => {
     prepareMaps(maps);
@@ -569,16 +575,20 @@ function Scene() {
   );
 }
 
+// Phones/tablets: full-screen custom shaders + MSAA at DPR 1.6 is fill-rate bound on
+// mobile GPUs, so cap lower there. Stage only mounts client-side.
+const DPR: [number, number] =
+  typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches ? [1, 1.3] : [1, 1.6];
+
 export default function Stage() {
   return (
     <Canvas
       camera={{ position: [HOME.x, HOME.y, HOME.z], fov: 42, near: 0.08, far: 1400 }}
-      dpr={[1, 1.6]}
+      dpr={DPR}
       gl={{
         antialias: true,
         alpha: false,
         powerPreference: "high-performance",
-        preserveDrawingBuffer: true,
       }}
       onCreated={({ gl }) => {
         gl.setClearColor(SCENE);

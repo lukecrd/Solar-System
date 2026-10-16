@@ -23,6 +23,8 @@ type SolarState = {
   pickSky: (sky: SkyPick | null) => void;
 };
 
+const MAX_SPEED = 1000;
+
 export const useSolar = create<SolarState>((set, get) => ({
   paused: false,
   speed: 1,
@@ -32,7 +34,12 @@ export const useSolar = create<SolarState>((set, get) => ({
   sky: null,
   nonce: 0,
   togglePaused: () => set({ paused: !get().paused }),
-  setSpeed: (speed) => set({ speed }),
+  // NaN/Infinity (e.g. Number("") from a cleared input) would poison sim.elapsed
+  // permanently; ignore them and cap the magnitude so a frame can't skip whole orbits.
+  setSpeed: (speed) => {
+    if (!Number.isFinite(speed)) return;
+    set({ speed: Math.max(-MAX_SPEED, Math.min(MAX_SPEED, speed)) });
+  },
   setTrails: (trails) => set({ trails }),
   setLabels: (labels) => set({ labels }),
   select: (selected) => set({ selected, sky: null, nonce: get().nonce + 1 }),

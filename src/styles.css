@@ -6,7 +6,7 @@
   --color-bg: #06070c;
   --color-fg: #e7edf6;
   --color-muted: #8d99ae;
-  --color-faint: #66758c;
+  --color-faint: #7f8ca3; /* was #66758c: ~3.8:1 on glass, now ≥4.5:1 */
   --color-surface: #10151f;
   --color-line: #2a3548;
   --color-accent: #d7b15a;
@@ -333,6 +333,21 @@
   border-color: var(--color-ice);
 }
 
+/* Visible keyboard focus on every HUD control. */
+.icon-btn:focus-visible,
+.text-btn:focus-visible,
+.speed input[type="range"]:focus-visible {
+  outline: 2px solid var(--color-ice);
+  outline-offset: 2px;
+}
+
+/* Rail scrolls (overflow), so draw the ring inside the pill to avoid clipping. */
+.nav-btn:focus-visible {
+  outline: 2px solid var(--color-ice);
+  outline-offset: -3px;
+  border-color: var(--color-line);
+}
+
 .dock {
   position: absolute;
   z-index: 5;
@@ -497,10 +512,47 @@
   .facts {
     gap: 0.45rem 0.65rem;
   }
+
+  /* Keep the dock to one row at ~390px: the label stays for screen readers. */
+  .transport {
+    flex: 1 1 12rem;
+  }
+
+  .speed {
+    min-width: 0;
+    padding: 0 0.15rem;
+  }
+
+  .speed label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .speed output {
+    min-width: 2.6rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .glass {
     backdrop-filter: none;
+  }
+
+  .rail,
+  .dossier {
+    scroll-behavior: auto;
+  }
+
+  /* Scoped to the app so injected platform chrome is untouched. */
+  .app-shell *,
+  .app-shell *::before,
+  .app-shell *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

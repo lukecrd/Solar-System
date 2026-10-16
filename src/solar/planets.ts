@@ -43,7 +43,12 @@ export type Planet = {
   /** Secondi visivi per un'orbita a velocità 1. Ordine reale, scala compressa. */
   period: number;
   phase: number;
-  /** Radianti al secondo di simulazione, a velocità 1. */
+  /**
+   * Radianti al secondo di simulazione, a velocità 1 (rotation.y attorno all'asse inclinato).
+   * Le orbite (orbit.ts e lune in Stage) girano in senso orario visto da +y, quindi una rotazione
+   * prograda ha segno NEGATIVO. Venere e Urano sono retrogradi tramite `tilt` (> 90°, convenzione
+   * IAU) e mantengono lo stesso segno degli altri: invertirlo li renderebbe di nuovo progradi.
+   */
   spin: number;
   tilt: number;
   texture: TextureKind;
@@ -95,7 +100,7 @@ export const PLANETS: Planet[] = [
     periapsis: 0.7,
     period: 7.2,
     phase: 0.4,
-    spin: 0.35,
+    spin: -0.35,
     tilt: 0.01,
     texture: "mercury",
     blurb:
@@ -148,7 +153,7 @@ export const PLANETS: Planet[] = [
     periapsis: 0.35,
     period: 20,
     phase: 0.9,
-    spin: 1.35,
+    spin: -1.35,
     tilt: 0.41,
     texture: "earth",
     atmosphere: "#9ec4ff",
@@ -185,7 +190,7 @@ export const PLANETS: Planet[] = [
     periapsis: 2.5,
     period: 28,
     phase: 2.4,
-    spin: 1.3,
+    spin: -1.3,
     tilt: 0.44,
     texture: "mars",
     blurb:
@@ -229,7 +234,7 @@ export const PLANETS: Planet[] = [
     periapsis: 1.15,
     period: 46,
     phase: 0.2,
-    spin: 2.4,
+    spin: -2.4,
     tilt: 0.05,
     texture: "jupiter",
     blurb:
@@ -239,7 +244,7 @@ export const PLANETS: Planet[] = [
       { label: "Distanza", value: "5,20 UA" },
       { label: "Anno", value: "11,9 anni" },
       { label: "Giorno", value: "9,9 ore" },
-      { label: "Lune", value: "95" },
+      { label: "Lune", value: "97" },
       { label: "Temperatura", value: "−110 °C" },
     ],
     satellites: [
@@ -261,7 +266,7 @@ export const PLANETS: Planet[] = [
     periapsis: 2.05,
     period: 62,
     phase: 1.1,
-    spin: 2.2,
+    spin: -2.2,
     tilt: 0.47,
     texture: "saturn",
     blurb:
@@ -271,12 +276,12 @@ export const PLANETS: Planet[] = [
       { label: "Distanza", value: "9,58 UA" },
       { label: "Anno", value: "29,5 anni" },
       { label: "Giorno", value: "10,7 ore" },
-      { label: "Lune", value: "146" },
+      { label: "Lune", value: "274" },
       { label: "Temperatura", value: "−140 °C" },
     ],
     ring: { inner: 1.72, outer: 2.45, color: "#ead9b4", opacity: 0.9 },
     satellites: [
-      { name: "Titano", radius: 0.12, orbit: 3.15, period: 8.5, phase: 0.4, color: "#e3c27a" },
+      { name: "Titano", radius: 0.088, orbit: 3.15, period: 8.5, phase: 0.4, color: "#e3c27a" },
     ],
   },
   {
@@ -301,7 +306,7 @@ export const PLANETS: Planet[] = [
       { label: "Distanza", value: "19,2 UA" },
       { label: "Anno", value: "84 anni" },
       { label: "Giorno", value: "17,2 ore" },
-      { label: "Lune", value: "28" },
+      { label: "Lune", value: "29" },
       { label: "Temperatura", value: "−195 °C" },
     ],
     ring: { inner: 1.2, outer: 1.55, color: "#c5dde4", opacity: 0.55 },
@@ -318,7 +323,7 @@ export const PLANETS: Planet[] = [
     periapsis: 0.55,
     period: 108,
     phase: 4.2,
-    spin: 1.7,
+    spin: -1.7,
     tilt: 0.49,
     texture: "neptune",
     blurb:
@@ -332,7 +337,7 @@ export const PLANETS: Planet[] = [
       { label: "Temperatura", value: "−200 °C" },
     ],
     satellites: [
-      { name: "Tritone", radius: 0.1, orbit: 1.7, period: 6.8, phase: 1.2, color: "#d5dbe6" },
+      { name: "Tritone", radius: 0.054, orbit: 1.7, period: 6.8, phase: 1.2, color: "#d5dbe6" },
     ],
   },
 ];

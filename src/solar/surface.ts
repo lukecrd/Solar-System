@@ -24,6 +24,17 @@ export function unitSphere() {
   return sphere;
 }
 
+let sphereLow: SphereGeometry | null = null;
+
+/** Shared low-poly unit sphere for small bodies (moons never exceed ~0.15 units). */
+export function unitSphereLow() {
+  if (!sphereLow) {
+    sphereLow = new SphereGeometry(1, 48, 32);
+    sphereLow.computeTangents();
+  }
+  return sphereLow;
+}
+
 export type CosmosMaps = Record<TextureKind, Texture> & {
   earthNight: Texture;
   earthSpec: Texture;

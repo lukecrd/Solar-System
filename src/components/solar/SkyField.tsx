@@ -6,7 +6,10 @@ import {
   BufferAttribute,
   BufferGeometry,
   CanvasTexture,
+  Color,
   GLSL3,
+  Matrix4,
+  Quaternion,
   Group,
   ShaderMaterial,
   Sprite,
@@ -45,6 +48,12 @@ const STAR_FRAG = `
 `;
 
 const POOL = 48;
+// Label layout (projects ~2.5k catalog points, sorts, collides) is throttled to
+// this interval and skipped entirely while the camera is still.
+const LAYOUT_EVERY = 0.12;
+const TINT_GALAXY = new Color("#f4e7c8");
+const TINT_FIGURE = new Color("#9ec0ea");
+const TINT_STAR = new Color("#f7f4ee");
 const STAR_R = 532;
 const GALAXY_R = 518;
 const LINE_R = 504;
@@ -256,12 +265,46 @@ export function SkyField({ map }: { map: Texture }) {
     [geometry, glow, labelCache, lines, material, sprite],
   );
 
-  useFrame((_, delta) => {
+  const layout = useRef({
+    at: -Infinity,
+    labels: false,
+    pos: new Vector3(Number.NaN, 0, 0),
+    quat: new Quaternion(),
+    proj: new Matrix4(),
+  });
+
+  useFrame((state, delta) => {
     if (!reduce) material.uniforms.uTime!.value += Math.min(delta, 0.05);
     const root = group.current;
     if (!root) return;
     root.updateWorldMatrix(true, false);
+    const sprites = pool.current;
     const labelsOn = useSolar.getState().labels;
+    const last = layout.current;
+    const now = state.clock.elapsedTime;
+    const moved =
+      !last.pos.equals(camera.position) ||
+      !last.quat.equals(camera.quaternion) ||
+      !last.proj.equals(camera.projectionMatrix);
+    if (labelsOn !== last.labels || (moved && now - last.at >= LAYOUT_EVERY)) {
+      last.at = now;
+      last.labels = labelsOn;
+      last.pos.copy(camera.position);
+      last.quat.copy(camera.quaternion);
+      last.proj.copy(camera.projectionMatrix);
+      layoutLabels(root, sprites, labelsOn);
+    }
+    // Cheap per-frame pass: keep visible labels at a constant on-screen size.
+    for (const spriteLabel of sprites) {
+      if (!spriteLabel?.visible) continue;
+      root.localToWorld(world.copy(spriteLabel.position));
+      const dist = Math.max(30, camera.position.distanceTo(world));
+      const height = dist * (spriteLabel.userData.heightK as number);
+      spriteLabel.scale.set(height * (spriteLabel.userData.aspect as number), height, 1);
+    }
+  });
+
+  function layoutLabels(root: Group, sprites: Sprite[], labelsOn: boolean) {
     const overview = camera.position.length() > 58;
     type Candidate = { item: Named; rank: number; x: number; y: number; aspect: number };
     const candidates: Candidate[] = [];
@@ -309,7 +352,6 @@ export function SkyField({ map }: { map: Texture }) {
       chosen.push(candidate);
       if (chosen.length === POOL) break;
     }
-    const sprites = pool.current;
     for (let index = 0; index < sprites.length; index++) {
       const spriteLabel = sprites[index];
       if (!spriteLabel) continue;
@@ -326,20 +368,16 @@ export function SkyField({ map }: { map: Texture }) {
       }
       const mat = spriteLabel.material as SpriteMaterial;
       if (mat.map !== entry.texture) mat.map = entry.texture;
-      mat.color.set(
-        candidate.item.kind === "galassia" ? "#f4e7c8" : candidate.item.kind === "costellazione" ? "#9ec0ea" : "#f7f4ee",
-      );
+      const kind = candidate.item.kind;
+      mat.color.copy(kind === "galassia" ? TINT_GALAXY : kind === "costellazione" ? TINT_FIGURE : TINT_STAR);
       namedPoint(candidate.item, local);
-      const lift =
-        candidate.item.kind === "galassia" ? GALAXY_R * 0.985 : candidate.item.kind === "costellazione" ? STAR_R * 0.955 : STAR_R * 0.975;
+      const lift = kind === "galassia" ? GALAXY_R * 0.985 : kind === "costellazione" ? STAR_R * 0.955 : STAR_R * 0.975;
       spriteLabel.position.set(local.x * lift, local.y * lift, local.z * lift);
-      root.localToWorld(world.copy(spriteLabel.position));
-      const dist = Math.max(30, camera.position.distanceTo(world));
-      const height = dist * (candidate.item.kind === "galassia" ? 0.016 : candidate.item.kind === "costellazione" ? 0.014 : 0.012);
-      spriteLabel.scale.set(height * entry.aspect, height, 1);
+      spriteLabel.userData.heightK = kind === "galassia" ? 0.016 : kind === "costellazione" ? 0.014 : 0.012;
+      spriteLabel.userData.aspect = entry.aspect;
       spriteLabel.visible = true;
     }
-  });
+  }
 
   const onPointerDown = (event: ThreeEvent<PointerEvent>) => {
     down.current.x = event.clientX;
